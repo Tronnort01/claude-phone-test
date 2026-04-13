@@ -16,11 +16,16 @@ import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.auth.ui.SetupScreen
 import com.stealthcalc.calculator.ui.CalculatorScreen
 import com.stealthcalc.calculator.viewmodel.SecretCodeResult
+import com.stealthcalc.notes.ui.NoteEditorScreen
+import com.stealthcalc.notes.ui.NotesListScreen
 import com.stealthcalc.stealth.ui.StealthHomeScreen
 
 sealed class AppScreen(val route: String) {
     data object Home : AppScreen("stealth_home")
     data object Notes : AppScreen("notes")
+    data object NoteEditor : AppScreen("note_editor/{noteId}") {
+        fun createRoute(noteId: String?) = "note_editor/${noteId ?: "new"}"
+    }
     data object Tasks : AppScreen("tasks")
     data object Recorder : AppScreen("recorder")
     data object Browser : AppScreen("browser")
@@ -100,7 +105,29 @@ fun StealthNavGraph(
         }
 
         composable(AppScreen.Notes.route) {
-            PlaceholderScreen(title = "Secure Notes", onBack = { navController.popBackStack() })
+            NotesListScreen(
+                onBack = { navController.popBackStack() },
+                onNoteClick = { noteId ->
+                    navController.navigate(AppScreen.NoteEditor.createRoute(noteId))
+                },
+                onNewNote = {
+                    navController.navigate(AppScreen.NoteEditor.createRoute(null))
+                }
+            )
+        }
+
+        composable(
+            route = AppScreen.NoteEditor.route,
+            arguments = listOf(
+                androidx.navigation.navArgument("noteId") {
+                    type = androidx.navigation.NavType.StringType
+                    defaultValue = "new"
+                }
+            )
+        ) {
+            NoteEditorScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(AppScreen.Tasks.route) {
