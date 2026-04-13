@@ -42,6 +42,7 @@ fun StealthHomeScreen(
     onNavigateToTasks: () -> Unit,
     onNavigateToRecorder: () -> Unit,
     onNavigateToBrowser: () -> Unit,
+    onNavigateToVault: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onLockRequested: () -> Unit,
 ) {
@@ -129,6 +130,21 @@ fun StealthHomeScreen(
                     onClick = onNavigateToBrowser,
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                ModuleCard(
+                    title = "Vault",
+                    subtitle = "Photos & files",
+                    icon = Icons.Default.Lock,
+                    onClick = onNavigateToVault,
+                    modifier = Modifier.weight(1f)
+                )
+                // Empty spacer to keep grid alignment
+                Spacer(modifier = Modifier.weight(1f))
             }
         }
     }

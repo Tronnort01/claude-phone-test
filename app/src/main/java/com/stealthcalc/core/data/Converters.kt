@@ -3,6 +3,7 @@ package com.stealthcalc.core.data
 import androidx.room.TypeConverter
 import com.stealthcalc.recorder.model.CameraFacing
 import com.stealthcalc.recorder.model.RecordingType
+import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.tasks.model.Priority
 import com.stealthcalc.tasks.model.Recurrence
 import com.stealthcalc.tasks.model.RecurrenceType
@@ -53,6 +54,13 @@ class Converters {
 
     @TypeConverter
     fun toCameraFacing(value: String?): CameraFacing? = value?.let { CameraFacing.valueOf(it) }
+
+    // VaultFileType
+    @TypeConverter
+    fun fromVaultFileType(type: VaultFileType): String = type.name
+
+    @TypeConverter
+    fun toVaultFileType(value: String): VaultFileType = VaultFileType.valueOf(value)
 
     // Set<String> for tags
     @TypeConverter

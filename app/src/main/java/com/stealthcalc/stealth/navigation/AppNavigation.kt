@@ -21,6 +21,7 @@ import com.stealthcalc.notes.ui.NotesListScreen
 import com.stealthcalc.stealth.ui.StealthHomeScreen
 import com.stealthcalc.tasks.ui.GoalsScreen
 import com.stealthcalc.settings.ui.SettingsScreen
+import com.stealthcalc.vault.ui.VaultScreen
 import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
@@ -45,6 +46,7 @@ sealed class AppScreen(val route: String) {
     data object RecordingsList : AppScreen("recordings_list")
     data object Browser : AppScreen("browser")
     data object LinkVault : AppScreen("link_vault")
+    data object Vault : AppScreen("vault")
     data object Settings : AppScreen("settings")
 }
 
@@ -122,6 +124,7 @@ fun StealthNavGraph(
                 onNavigateToTasks = { navController.navigate(AppScreen.Tasks.route) },
                 onNavigateToRecorder = { navController.navigate(AppScreen.Recorder.route) },
                 onNavigateToBrowser = { navController.navigate(AppScreen.Browser.route) },
+                onNavigateToVault = { navController.navigate(AppScreen.Vault.route) },
                 onNavigateToSettings = { navController.navigate(AppScreen.Settings.route) },
                 onLockRequested = onLockRequested,
             )
@@ -213,6 +216,13 @@ fun StealthNavGraph(
                     navController.popBackStack()
                     // The browser will load this URL on next compose
                 }
+            )
+        }
+
+        composable(AppScreen.Vault.route) {
+            VaultScreen(
+                onBack = { navController.popBackStack() },
+                onOpenFile = { /* TODO: open encrypted file viewer */ }
             )
         }
 

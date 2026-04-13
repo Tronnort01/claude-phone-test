@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.stealthcalc.core.data.StealthDatabase
 import com.stealthcalc.core.encryption.KeyStoreManager
+import com.stealthcalc.vault.data.VaultDao
 import com.stealthcalc.browser.data.LinkCollectionDao
 import com.stealthcalc.browser.data.SavedLinkDao
 import com.stealthcalc.recorder.data.RecordingDao
@@ -74,4 +75,7 @@ object DatabaseModule {
 
     @Provides
     fun provideLinkCollectionDao(db: StealthDatabase): LinkCollectionDao = db.linkCollectionDao()
+
+    @Provides
+    fun provideVaultDao(db: StealthDatabase): VaultDao = db.vaultDao()
 }
