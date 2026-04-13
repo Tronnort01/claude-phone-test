@@ -7,6 +7,10 @@ import com.stealthcalc.core.encryption.KeyStoreManager
 import com.stealthcalc.notes.data.NoteDao
 import com.stealthcalc.notes.data.NoteFolderDao
 import com.stealthcalc.notes.data.NoteTagDao
+import com.stealthcalc.tasks.data.GoalDao
+import com.stealthcalc.tasks.data.HabitDao
+import com.stealthcalc.tasks.data.TaskDao
+import com.stealthcalc.tasks.data.TaskListDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -46,4 +50,16 @@ object DatabaseModule {
 
     @Provides
     fun provideNoteTagDao(db: StealthDatabase): NoteTagDao = db.noteTagDao()
+
+    @Provides
+    fun provideTaskDao(db: StealthDatabase): TaskDao = db.taskDao()
+
+    @Provides
+    fun provideTaskListDao(db: StealthDatabase): TaskListDao = db.taskListDao()
+
+    @Provides
+    fun provideHabitDao(db: StealthDatabase): HabitDao = db.habitDao()
+
+    @Provides
+    fun provideGoalDao(db: StealthDatabase): GoalDao = db.goalDao()
 }

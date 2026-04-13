@@ -110,24 +110,28 @@ A full personal productivity system.
 
 **Covert notifications:** Reminders show as "Calculation complete" or a customizable neutral message. Tapping opens the calculator (user must re-enter code to see the actual task).
 
-### 5. Covert Voice Recorder
+### 5. Covert Audio & Video Recorder
 
-A hidden voice recorder with a deceptive "sign-in" screen overlay.
+A hidden recorder (audio AND video) with a deceptive "sign-in" screen overlay.
 
 | Feature | Detail |
 |---------|--------|
 | Activation | Trigger from stealth home, or via a quick-action (e.g. long-press calculator `0` key) |
+| Recording modes | **Audio only** (microphone) or **Video** (front/back camera + microphone) — user picks before starting |
 | Cover screen | While recording, the display shows a **fake sign-in page** — dark/black background with a generic email + password form and a "Sign In" button. Looks like any app's login screen. |
 | Cover behavior | The fake sign-in form is interactive but does nothing — tapping "Sign In" shows a fake "Incorrect password" shake animation. Anyone glancing at the phone sees a boring sign-in page. |
-| Recording indicator | No visible recording indicator on the cover screen. A tiny dot in the status bar (required by Android 12+) is unavoidable but blends in. |
+| Video + cover | Camera records via a 1x1 pixel transparent preview surface behind the fake sign-in UI — the camera feed is never visible on screen |
+| Camera selection | Front or back camera, switchable before recording starts |
+| Recording indicator | No visible recording indicator on the cover screen. The status bar dot (required by Android 12+) is unavoidable but blends in. |
 | Controls | Tap a hidden region (e.g. top-left corner 3x) or use the secret calculator code to return to the real UI and stop recording. |
 | Audio format | AAC/M4A via MediaRecorder — good quality, small file size |
+| Video format | H.264/MP4 via MediaRecorder — 720p default, configurable quality |
 | Storage | Recordings saved to encrypted app-private storage with timestamps |
-| Playback | Built-in audio player in the stealth UI — list of recordings with date, duration, waveform preview |
+| Playback | Built-in media player in the stealth UI — list of recordings with date, duration; video thumbnail preview for video files, waveform for audio |
 | File management | Rename, delete, export (decrypted copy to Downloads) |
-| Background recording | Continues recording even if the screen turns off or the user navigates away |
+| Background recording | Audio continues even if screen turns off. Video requires screen on but cover screen hides the real UI. |
 | Battery | Show estimated battery drain in the recorder UI; auto-stop option after N hours |
-| Max duration | Configurable limit (default: 4 hours) to prevent accidental all-day recording |
+| Max duration | Configurable limit (default: 4 hours audio, 1 hour video) to prevent accidental all-day recording |
 
 **Cover screen design:**
 ```
@@ -366,17 +370,23 @@ data class LinkTagCrossRef(
     val tagId: String
 )
 
-// --- Voice Recordings ---
+// --- Recordings (Audio & Video) ---
 @Entity(tableName = "recordings")
 data class Recording(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),
     val title: String,                // User-editable name (default: "Recording YYYY-MM-DD HH:mm")
     val encryptedFilePath: String,    // Path in app-private encrypted storage
+    val type: RecordingType,          // AUDIO or VIDEO
     val durationMs: Long,             // Recording duration in milliseconds
     val fileSizeBytes: Long,          // File size
-    val format: String = "m4a",       // Audio format
+    val format: String = "m4a",       // "m4a" for audio, "mp4" for video
+    val thumbnailPath: String? = null, // Encrypted thumbnail for video recordings
+    val cameraFacing: CameraFacing? = null, // FRONT or BACK (video only)
     val createdAt: Long = System.currentTimeMillis()
 )
+
+enum class RecordingType { AUDIO, VIDEO }
+enum class CameraFacing { FRONT, BACK }
 ```
 
 ---
@@ -453,13 +463,16 @@ data class Recording(
 - [ ] Goals and milestones
 - [ ] Completion statistics dashboard
 
-### Phase 4: Covert Voice Recorder
+### Phase 4: Covert Audio & Video Recorder
 - [ ] MediaRecorder service for background audio capture
+- [ ] Video recording via CameraX with hidden 1x1 preview surface
+- [ ] Front/back camera selection for video mode
 - [ ] Fake sign-in cover screen (black background, dummy email/password form)
 - [ ] Cover screen interactions (fake "Incorrect password" animation)
 - [ ] Hidden exit gesture (triple-tap corner) to return to stealth UI
-- [ ] Encrypted audio file storage
-- [ ] Recordings list with playback (waveform, seek, speed control)
+- [ ] Encrypted audio + video file storage
+- [ ] Recordings list with playback (waveform for audio, video player for video)
+- [ ] Video thumbnail generation (encrypted)
 - [ ] Recording management (rename, delete, export)
 - [ ] Auto-stop timer and battery awareness
 - [ ] Quick-launch from calculator (long-press `0`)

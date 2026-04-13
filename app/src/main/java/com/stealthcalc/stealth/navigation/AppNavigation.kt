@@ -19,6 +19,10 @@ import com.stealthcalc.calculator.viewmodel.SecretCodeResult
 import com.stealthcalc.notes.ui.NoteEditorScreen
 import com.stealthcalc.notes.ui.NotesListScreen
 import com.stealthcalc.stealth.ui.StealthHomeScreen
+import com.stealthcalc.tasks.ui.GoalsScreen
+import com.stealthcalc.tasks.ui.HabitTrackerScreen
+import com.stealthcalc.tasks.ui.TaskDetailScreen
+import com.stealthcalc.tasks.ui.TaskListScreen
 
 sealed class AppScreen(val route: String) {
     data object Home : AppScreen("stealth_home")
@@ -27,6 +31,11 @@ sealed class AppScreen(val route: String) {
         fun createRoute(noteId: String?) = "note_editor/${noteId ?: "new"}"
     }
     data object Tasks : AppScreen("tasks")
+    data object TaskDetail : AppScreen("task_detail/{taskId}") {
+        fun createRoute(taskId: String?) = "task_detail/${taskId ?: "new"}"
+    }
+    data object Habits : AppScreen("habits")
+    data object Goals : AppScreen("goals")
     data object Recorder : AppScreen("recorder")
     data object Browser : AppScreen("browser")
     data object Settings : AppScreen("settings")
@@ -131,11 +140,41 @@ fun StealthNavGraph(
         }
 
         composable(AppScreen.Tasks.route) {
-            PlaceholderScreen(title = "Task Manager", onBack = { navController.popBackStack() })
+            TaskListScreen(
+                onBack = { navController.popBackStack() },
+                onTaskClick = { taskId ->
+                    navController.navigate(AppScreen.TaskDetail.createRoute(taskId))
+                },
+                onNewTask = {
+                    navController.navigate(AppScreen.TaskDetail.createRoute(null))
+                },
+                onNavigateToHabits = { navController.navigate(AppScreen.Habits.route) },
+                onNavigateToGoals = { navController.navigate(AppScreen.Goals.route) },
+            )
+        }
+
+        composable(
+            route = AppScreen.TaskDetail.route,
+            arguments = listOf(
+                androidx.navigation.navArgument("taskId") {
+                    type = androidx.navigation.NavType.StringType
+                    defaultValue = "new"
+                }
+            )
+        ) {
+            TaskDetailScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Habits.route) {
+            HabitTrackerScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Goals.route) {
+            GoalsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(AppScreen.Recorder.route) {
-            PlaceholderScreen(title = "Voice Recorder", onBack = { navController.popBackStack() })
+            PlaceholderScreen(title = "Recorder", onBack = { navController.popBackStack() })
         }
 
         composable(AppScreen.Browser.route) {
