@@ -2,3 +2,21 @@ __pycache__/
 *.pyc
 .env
 .venv/
+
+# Android / Gradle
+*.iml
+.gradle/
+local.properties
+.idea/
+*.class
+*.log
+*.apk
+*.aab
+*.ap_
+*.dex
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.keystore
+!debug.keystore

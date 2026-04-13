@@ -1,0 +1,124 @@
+package com.stealthcalc.stealth.navigation
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.stealthcalc.auth.SecretCodeManager
+import com.stealthcalc.auth.ui.SetupScreen
+import com.stealthcalc.calculator.ui.CalculatorScreen
+import com.stealthcalc.calculator.viewmodel.SecretCodeResult
+import com.stealthcalc.stealth.ui.StealthHomeScreen
+
+sealed class AppScreen(val route: String) {
+    data object Home : AppScreen("stealth_home")
+    data object Notes : AppScreen("notes")
+    data object Tasks : AppScreen("tasks")
+    data object Recorder : AppScreen("recorder")
+    data object Browser : AppScreen("browser")
+    data object Settings : AppScreen("settings")
+}
+
+@Composable
+fun AppRoot(
+    isStealthUnlocked: Boolean,
+    onStealthUnlocked: () -> Unit,
+    onLockRequested: () -> Unit,
+) {
+    var showSetup by remember { mutableStateOf(false) }
+    var setupCandidateCode by remember { mutableStateOf("") }
+
+    AnimatedContent(
+        targetState = when {
+            showSetup -> ScreenState.Setup
+            isStealthUnlocked -> ScreenState.Stealth
+            else -> ScreenState.Calculator
+        },
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        label = "root_transition"
+    ) { screenState ->
+        when (screenState) {
+            ScreenState.Calculator -> {
+                CalculatorScreen(
+                    onSecretCodeResult = { result ->
+                        when (result) {
+                            is SecretCodeResult.Unlocked -> onStealthUnlocked()
+                            is SecretCodeResult.NeedsSetup -> {
+                                setupCandidateCode = result.candidateCode
+                                showSetup = true
+                            }
+                            SecretCodeResult.None -> {}
+                        }
+                    }
+                )
+            }
+            ScreenState.Setup -> {
+                SetupScreen(
+                    suggestedCode = setupCandidateCode,
+                    onSetupComplete = {
+                        showSetup = false
+                        onStealthUnlocked()
+                    }
+                )
+            }
+            ScreenState.Stealth -> {
+                StealthNavGraph(
+                    onLockRequested = onLockRequested
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StealthNavGraph(
+    onLockRequested: () -> Unit
+) {
+    val navController = rememberNavController()
+
+    NavHost(
+        navController = navController,
+        startDestination = AppScreen.Home.route,
+    ) {
+        composable(AppScreen.Home.route) {
+            StealthHomeScreen(
+                onNavigateToNotes = { navController.navigate(AppScreen.Notes.route) },
+                onNavigateToTasks = { navController.navigate(AppScreen.Tasks.route) },
+                onNavigateToRecorder = { navController.navigate(AppScreen.Recorder.route) },
+                onNavigateToBrowser = { navController.navigate(AppScreen.Browser.route) },
+                onNavigateToSettings = { navController.navigate(AppScreen.Settings.route) },
+                onLockRequested = onLockRequested,
+            )
+        }
+
+        composable(AppScreen.Notes.route) {
+            PlaceholderScreen(title = "Secure Notes", onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Tasks.route) {
+            PlaceholderScreen(title = "Task Manager", onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Recorder.route) {
+            PlaceholderScreen(title = "Voice Recorder", onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Browser.route) {
+            PlaceholderScreen(title = "Private Browser", onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Settings.route) {
+            PlaceholderScreen(title = "Settings", onBack = { navController.popBackStack() })
+        }
+    }
+}
+
+private enum class ScreenState { Calculator, Setup, Stealth }
