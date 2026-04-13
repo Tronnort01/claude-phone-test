@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.example.claudephonetest'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.example.claudephonetest"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    // Fix: Updated GeckoView version from 123.0.20240212205514 (non-existent)
+    // to 123.0.20240213221259 (actual published version on maven.mozilla.org)
+    implementation 'org.mozilla.geckoview:geckoview-arm64-v8a:123.0.20240213221259'
+}
