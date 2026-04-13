@@ -98,6 +98,39 @@ fun SettingsScreen(
                 onToggle = viewModel::toggleScreenshotBlock
             )
 
+            SettingsToggle(
+                title = "Biometric Unlock",
+                subtitle = "Use fingerprint to re-enter after auto-lock",
+                checked = state.isBiometricEnabled,
+                onToggle = viewModel::toggleBiometric
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // --- Decoy section ---
+            SectionHeader("Decoy PIN")
+
+            if (state.isDecoyEnabled) {
+                SettingsRow(
+                    title = "Decoy PIN Active",
+                    subtitle = "A second PIN opens a fake empty vault",
+                    onClick = {},
+                )
+                SettingsRow(
+                    title = "Disable Decoy PIN",
+                    subtitle = "Remove the decoy PIN",
+                    onClick = viewModel::disableDecoy,
+                    trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+                )
+            } else {
+                SettingsRow(
+                    title = "Set Up Decoy PIN",
+                    subtitle = "A second code that opens a fake empty app",
+                    onClick = viewModel::showDecoyDialog,
+                    trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+                )
+            }
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             // --- Panic section ---
@@ -224,6 +257,55 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = viewModel::hideChangeCodeDialog) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Decoy PIN dialog
+    if (state.showDecoyDialog) {
+        var decoyCode by remember { mutableStateOf("") }
+        var confirmDecoy by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = viewModel::hideDecoyDialog,
+            title = { Text("Set Decoy PIN") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Enter a second code on the calculator. This code opens a fake empty app — plausible deniability.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                    OutlinedTextField(
+                        value = decoyCode,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) decoyCode = it },
+                        label = { Text("Decoy code") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = confirmDecoy,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) confirmDecoy = it },
+                        label = { Text("Confirm decoy code") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    state.decoyError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.setDecoyCode(decoyCode, confirmDecoy) }) {
+                    Text("Set Decoy")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::hideDecoyDialog) { Text("Cancel") }
             }
         )
     }

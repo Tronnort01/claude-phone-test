@@ -18,9 +18,13 @@ import com.stealthcalc.calculator.ui.CalculatorScreen
 import com.stealthcalc.calculator.viewmodel.SecretCodeResult
 import com.stealthcalc.notes.ui.NoteEditorScreen
 import com.stealthcalc.notes.ui.NotesListScreen
+import com.stealthcalc.stealth.ui.DecoyHomeScreen
 import com.stealthcalc.stealth.ui.StealthHomeScreen
 import com.stealthcalc.tasks.ui.GoalsScreen
 import com.stealthcalc.settings.ui.SettingsScreen
+import com.stealthcalc.vault.data.VaultRepository
+import com.stealthcalc.vault.service.FileEncryptionService
+import com.stealthcalc.vault.ui.SecureCameraScreen
 import com.stealthcalc.vault.ui.VaultScreen
 import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
@@ -47,6 +51,7 @@ sealed class AppScreen(val route: String) {
     data object Browser : AppScreen("browser")
     data object LinkVault : AppScreen("link_vault")
     data object Vault : AppScreen("vault")
+    data object SecureCamera : AppScreen("secure_camera")
     data object Settings : AppScreen("settings")
 }
 
@@ -59,10 +64,12 @@ fun AppRoot(
     var showSetup by remember { mutableStateOf(false) }
     var setupCandidateCode by remember { mutableStateOf("") }
     var activeSecretPin by remember { mutableStateOf("") }
+    var isDecoyMode by remember { mutableStateOf(false) }
 
     AnimatedContent(
         targetState = when {
             showSetup -> ScreenState.Setup
+            isDecoyMode -> ScreenState.Decoy
             isStealthUnlocked -> ScreenState.Stealth
             else -> ScreenState.Calculator
         },
@@ -76,6 +83,11 @@ fun AppRoot(
                         when (result) {
                             is SecretCodeResult.Unlocked -> {
                                 activeSecretPin = result.enteredCode
+                                isDecoyMode = false
+                                onStealthUnlocked()
+                            }
+                            is SecretCodeResult.DecoyUnlocked -> {
+                                isDecoyMode = true
                                 onStealthUnlocked()
                             }
                             is SecretCodeResult.NeedsSetup -> {
@@ -94,6 +106,14 @@ fun AppRoot(
                         activeSecretPin = code
                         showSetup = false
                         onStealthUnlocked()
+                    }
+                )
+            }
+            ScreenState.Decoy -> {
+                DecoyHomeScreen(
+                    onLockRequested = {
+                        isDecoyMode = false
+                        onLockRequested()
                     }
                 )
             }
@@ -222,7 +242,20 @@ fun StealthNavGraph(
         composable(AppScreen.Vault.route) {
             VaultScreen(
                 onBack = { navController.popBackStack() },
-                onOpenFile = { /* TODO: open encrypted file viewer */ }
+                onOpenFile = { /* TODO: open encrypted file viewer */ },
+                onOpenCamera = { navController.navigate(AppScreen.SecureCamera.route) }
+            )
+        }
+
+        composable(AppScreen.SecureCamera.route) {
+            // Inject encryption service and vault repo via hilt entry point
+            val vaultViewModel: com.stealthcalc.vault.viewmodel.VaultViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+            SecureCameraScreen(
+                encryptionService = vaultViewModel.encryptionService,
+                onPhotoCaptured = { vaultFile ->
+                    vaultViewModel.saveImportedFile(vaultFile)
+                },
+                onClose = { navController.popBackStack() }
             )
         }
 
@@ -232,4 +265,4 @@ fun StealthNavGraph(
     }
 }
 
-private enum class ScreenState { Calculator, Setup, Stealth }
+private enum class ScreenState { Calculator, Setup, Decoy, Stealth }

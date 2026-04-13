@@ -3,6 +3,7 @@ package com.stealthcalc.settings.viewmodel
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import com.stealthcalc.auth.AutoLockManager
+import com.stealthcalc.auth.BiometricHelper
 import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.core.di.EncryptedPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,16 +18,21 @@ data class SettingsState(
     val isPanicShakeEnabled: Boolean = true,
     val isPanicBackEnabled: Boolean = true,
     val isScreenshotBlocked: Boolean = true,
+    val isBiometricEnabled: Boolean = false,
+    val isDecoyEnabled: Boolean = false,
     // Change code
     val showChangeCodeDialog: Boolean = false,
     val changeCodeError: String? = null,
     val changeCodeSuccess: Boolean = false,
+    val showDecoyDialog: Boolean = false,
+    val decoyError: String? = null,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val secretCodeManager: SecretCodeManager,
     private val autoLockManager: AutoLockManager,
+    private val biometricHelper: BiometricHelper,
     @EncryptedPrefs private val prefs: SharedPreferences
 ) : ViewModel() {
 
@@ -42,6 +48,8 @@ class SettingsViewModel @Inject constructor(
             isPanicShakeEnabled = prefs.getBoolean(KEY_PANIC_SHAKE, true),
             isPanicBackEnabled = prefs.getBoolean(KEY_PANIC_BACK, true),
             isScreenshotBlocked = prefs.getBoolean(KEY_SCREENSHOT_BLOCKED, true),
+            isBiometricEnabled = biometricHelper.isBiometricEnabled,
+            isDecoyEnabled = secretCodeManager.isDecoyEnabled,
         )
     )
     val state: StateFlow<SettingsState> = _state.asStateFlow()
@@ -101,5 +109,41 @@ class SettingsViewModel @Inject constructor(
             _state.update { it.copy(changeCodeError = "Current code is incorrect") }
             return false
         }
+    }
+
+    // --- Biometric ---
+
+    fun toggleBiometric() {
+        val new = !_state.value.isBiometricEnabled
+        biometricHelper.setBiometricEnabled(new)
+        _state.update { it.copy(isBiometricEnabled = new) }
+    }
+
+    // --- Decoy PIN ---
+
+    fun showDecoyDialog() {
+        _state.update { it.copy(showDecoyDialog = true, decoyError = null) }
+    }
+
+    fun hideDecoyDialog() {
+        _state.update { it.copy(showDecoyDialog = false, decoyError = null) }
+    }
+
+    fun setDecoyCode(code: String, confirmCode: String) {
+        if (code != confirmCode) {
+            _state.update { it.copy(decoyError = "Codes don't match") }
+            return
+        }
+        if (code.length < 4) {
+            _state.update { it.copy(decoyError = "Code must be at least 4 digits") }
+            return
+        }
+        secretCodeManager.setDecoyCode(code)
+        _state.update { it.copy(showDecoyDialog = false, isDecoyEnabled = true, decoyError = null) }
+    }
+
+    fun disableDecoy() {
+        secretCodeManager.disableDecoy()
+        _state.update { it.copy(isDecoyEnabled = false) }
     }
 }

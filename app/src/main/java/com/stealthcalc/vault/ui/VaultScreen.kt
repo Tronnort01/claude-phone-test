@@ -85,6 +85,7 @@ import com.stealthcalc.vault.viewmodel.VaultViewModel
 fun VaultScreen(
     onBack: () -> Unit,
     onOpenFile: (VaultFile) -> Unit,
+    onOpenCamera: () -> Unit = {},
     viewModel: VaultViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -168,11 +169,25 @@ fun VaultScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showImportOptions = true },
-                containerColor = MaterialTheme.colorScheme.primary
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Import")
+                // Camera FAB
+                FloatingActionButton(
+                    onClick = onOpenCamera,
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Secure Camera")
+                }
+                // Import FAB
+                FloatingActionButton(
+                    onClick = { showImportOptions = true },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Import")
+                }
             }
         }
     ) { padding ->

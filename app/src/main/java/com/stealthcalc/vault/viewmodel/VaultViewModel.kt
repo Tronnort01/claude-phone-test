@@ -44,7 +44,7 @@ data class VaultScreenState(
 @HiltViewModel
 class VaultViewModel @Inject constructor(
     private val repository: VaultRepository,
-    private val encryptionService: FileEncryptionService,
+    val encryptionService: FileEncryptionService,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -164,6 +164,10 @@ class VaultViewModel @Inject constructor(
             _isImporting.value = false
             _importProgress.value = ""
         }
+    }
+
+    fun saveImportedFile(file: VaultFile) {
+        viewModelScope.launch { repository.saveFile(file) }
     }
 
     fun deleteFile(file: VaultFile) {

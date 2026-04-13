@@ -12,6 +12,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.stealthcalc.auth.AutoLockManager
+import com.stealthcalc.auth.BiometricHelper
+import com.stealthcalc.auth.PanicHandler
+import com.stealthcalc.core.util.SecureClipboard
 import com.stealthcalc.stealth.navigation.AppRoot
 import com.stealthcalc.ui.theme.StealthCalcTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -23,6 +26,15 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var autoLockManager: AutoLockManager
+
+    @Inject
+    lateinit var biometricHelper: BiometricHelper
+
+    @Inject
+    lateinit var panicHandler: PanicHandler
+
+    @Inject
+    lateinit var secureClipboard: SecureClipboard
 
     private var isStealthVisible by mutableStateOf(false)
 

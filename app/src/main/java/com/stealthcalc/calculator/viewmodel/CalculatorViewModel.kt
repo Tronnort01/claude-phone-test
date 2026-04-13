@@ -127,11 +127,16 @@ class CalculatorViewModel @Inject constructor(
         if (codeCandidate.isNotEmpty()) {
             when (val result = secretCodeManager.validateCode(codeCandidate)) {
                 is SecretCodeManager.ValidationResult.Valid -> {
-                    // Show the calculation result normally, but signal unlock
                     performCalculation()
                     val code = codeCandidate
                     inputBuffer.clear()
                     return SecretCodeResult.Unlocked(code)
+                }
+                is SecretCodeManager.ValidationResult.DecoyValid -> {
+                    performCalculation()
+                    val code = codeCandidate
+                    inputBuffer.clear()
+                    return SecretCodeResult.DecoyUnlocked(code)
                 }
                 is SecretCodeManager.ValidationResult.NotSetup -> {
                     // First time — need setup
@@ -268,5 +273,6 @@ class CalculatorViewModel @Inject constructor(
 sealed class SecretCodeResult {
     data object None : SecretCodeResult()
     data class Unlocked(val enteredCode: String) : SecretCodeResult()
+    data class DecoyUnlocked(val enteredCode: String) : SecretCodeResult()
     data class NeedsSetup(val candidateCode: String) : SecretCodeResult()
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin
@@ -37,6 +38,7 @@ import com.stealthcalc.notes.viewmodel.NoteEditorViewModel
 @Composable
 fun NoteEditorScreen(
     onBack: () -> Unit,
+    onSecureCopy: ((String) -> Unit)? = null,
     viewModel: NoteEditorViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -63,6 +65,18 @@ fun NoteEditorScreen(
                     }
                 },
                 actions = {
+                    if (onSecureCopy != null) {
+                        IconButton(onClick = {
+                            val text = state.content.ifBlank { state.title }
+                            if (text.isNotBlank()) onSecureCopy(text)
+                        }) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = "Secure Copy",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     IconButton(onClick = viewModel::togglePin) {
                         Icon(
                             if (state.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,

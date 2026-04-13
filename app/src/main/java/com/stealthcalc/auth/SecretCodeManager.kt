@@ -17,6 +17,9 @@ class SecretCodeManager @Inject constructor(
         private const val KEY_IS_SETUP = "is_setup_complete"
         private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
         private const val KEY_LOCKOUT_UNTIL = "lockout_until"
+        private const val KEY_DECOY_HASH = "decoy_code_hash"
+        private const val KEY_DECOY_SALT = "decoy_code_salt"
+        private const val KEY_DECOY_ENABLED = "decoy_enabled"
         private const val MAX_ATTEMPTS = 5
         private const val LOCKOUT_DURATION_MS = 30_000L
     }
@@ -46,6 +49,19 @@ class SecretCodeManager @Inject constructor(
         val storedHash = prefs.getString(KEY_CODE_HASH, null) ?: return ValidationResult.NotSetup
         val salt = prefs.getString(KEY_CODE_SALT, null) ?: return ValidationResult.NotSetup
 
+        // Check decoy code first
+        if (prefs.getBoolean(KEY_DECOY_ENABLED, false)) {
+            val decoyHash = prefs.getString(KEY_DECOY_HASH, null)
+            val decoySalt = prefs.getString(KEY_DECOY_SALT, null)
+            if (decoyHash != null && decoySalt != null) {
+                val decoyInputHash = hashCode(code, decoySalt)
+                if (decoyInputHash == decoyHash) {
+                    prefs.edit().putInt(KEY_FAILED_ATTEMPTS, 0).apply()
+                    return ValidationResult.DecoyValid
+                }
+            }
+        }
+
         val inputHash = hashCode(code, salt)
         return if (inputHash == storedHash) {
             // Reset failed attempts on success
@@ -69,6 +85,29 @@ class SecretCodeManager @Inject constructor(
         return true
     }
 
+    // --- Decoy PIN ---
+
+    val isDecoyEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DECOY_ENABLED, false)
+
+    fun setDecoyCode(code: String) {
+        val salt = generateSalt()
+        val hash = hashCode(code, salt)
+        prefs.edit()
+            .putString(KEY_DECOY_HASH, hash)
+            .putString(KEY_DECOY_SALT, salt)
+            .putBoolean(KEY_DECOY_ENABLED, true)
+            .apply()
+    }
+
+    fun disableDecoy() {
+        prefs.edit()
+            .remove(KEY_DECOY_HASH)
+            .remove(KEY_DECOY_SALT)
+            .putBoolean(KEY_DECOY_ENABLED, false)
+            .apply()
+    }
+
     private fun hashCode(code: String, salt: String): String {
         val input = "$salt:$code"
         val digest = MessageDigest.getInstance("SHA-256")
@@ -88,6 +127,7 @@ class SecretCodeManager @Inject constructor(
 
     sealed class ValidationResult {
         data object Valid : ValidationResult()
+        data object DecoyValid : ValidationResult()
         data object Invalid : ValidationResult()
         data object NotSetup : ValidationResult()
         data class LockedOut(val remainingMs: Long) : ValidationResult()
