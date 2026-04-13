@@ -56,6 +56,7 @@ fun AppRoot(
 ) {
     var showSetup by remember { mutableStateOf(false) }
     var setupCandidateCode by remember { mutableStateOf("") }
+    var activeSecretPin by remember { mutableStateOf("") }
 
     AnimatedContent(
         targetState = when {
@@ -71,7 +72,10 @@ fun AppRoot(
                 CalculatorScreen(
                     onSecretCodeResult = { result ->
                         when (result) {
-                            is SecretCodeResult.Unlocked -> onStealthUnlocked()
+                            is SecretCodeResult.Unlocked -> {
+                                activeSecretPin = result.enteredCode
+                                onStealthUnlocked()
+                            }
                             is SecretCodeResult.NeedsSetup -> {
                                 setupCandidateCode = result.candidateCode
                                 showSetup = true
@@ -84,7 +88,8 @@ fun AppRoot(
             ScreenState.Setup -> {
                 SetupScreen(
                     suggestedCode = setupCandidateCode,
-                    onSetupComplete = {
+                    onSetupComplete = { code ->
+                        activeSecretPin = code
                         showSetup = false
                         onStealthUnlocked()
                     }
@@ -92,7 +97,8 @@ fun AppRoot(
             }
             ScreenState.Stealth -> {
                 StealthNavGraph(
-                    onLockRequested = onLockRequested
+                    onLockRequested = onLockRequested,
+                    secretPin = activeSecretPin,
                 )
             }
         }
@@ -101,7 +107,8 @@ fun AppRoot(
 
 @Composable
 fun StealthNavGraph(
-    onLockRequested: () -> Unit
+    onLockRequested: () -> Unit,
+    secretPin: String,
 ) {
     val navController = rememberNavController()
 
@@ -183,7 +190,8 @@ fun StealthNavGraph(
         composable(AppScreen.Recorder.route) {
             RecorderScreen(
                 onBack = { navController.popBackStack() },
-                onNavigateToRecordings = { navController.navigate(AppScreen.RecordingsList.route) }
+                onNavigateToRecordings = { navController.navigate(AppScreen.RecordingsList.route) },
+                secretPin = secretPin,
             )
         }
 

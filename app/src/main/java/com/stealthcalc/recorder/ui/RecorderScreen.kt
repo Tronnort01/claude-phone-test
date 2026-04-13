@@ -57,6 +57,7 @@ import com.stealthcalc.recorder.viewmodel.RecorderViewModel
 fun RecorderScreen(
     onBack: () -> Unit,
     onNavigateToRecordings: () -> Unit,
+    secretPin: String,
     viewModel: RecorderViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -67,8 +68,9 @@ fun RecorderScreen(
         label = "cover_transition"
     ) { showCover ->
         if (showCover) {
-            FakeSignInScreen(
-                onExitToRecorder = { viewModel.exitCoverScreen() }
+            FakeLockScreen(
+                secretPin = secretPin,
+                onUnlock = { viewModel.exitCoverScreen() }
             )
         } else {
             RecorderControlPanel(
@@ -271,7 +273,7 @@ private fun RecorderControlPanel(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "Show fake sign-in screen",
+                        "Show lock screen",
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.labelLarge
                     )
@@ -280,7 +282,7 @@ private fun RecorderControlPanel(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    "Triple-tap top-left corner to return here",
+                    "Enter your PIN on the lock screen to return here",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                 )
