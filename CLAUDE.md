@@ -10,7 +10,7 @@ Android project using Mozilla GeckoView as the browser engine.
 
 Builds run via GitHub Actions (`.github/workflows/build.yml`). Push to any `claude/**` or `master` branch triggers a build automatically. The workflow also supports `workflow_dispatch` for manual triggers.
 
-The APK is uploaded as a GitHub Actions artifact named `app-debug`.
+The APK is uploaded as a GitHub Actions artifact named `app-debug`. On failure, build logs are uploaded as `error-log` artifact.
 
 Do not build locally - use GitHub Actions.
 
