@@ -32,6 +32,14 @@ enum class VaultFileType {
     OTHER
 }
 
+enum class VaultSortOrder(val label: String) {
+    DATE_NEWEST("Newest first"),
+    DATE_OLDEST("Oldest first"),
+    SIZE_LARGEST("Largest first"),
+    SIZE_SMALLEST("Smallest first"),
+    NAME_AZ("Name A–Z"),
+}
+
 @Entity(tableName = "vault_folders")
 data class VaultFolder(
     @PrimaryKey val id: String = UUID.randomUUID().toString(),

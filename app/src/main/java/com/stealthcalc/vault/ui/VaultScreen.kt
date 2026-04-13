@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -77,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.model.VaultFolder
+import com.stealthcalc.vault.model.VaultSortOrder
 import com.stealthcalc.vault.viewmodel.VaultFilter
 import com.stealthcalc.vault.viewmodel.VaultViewModel
 
@@ -92,6 +95,7 @@ fun VaultScreen(
     var showNewFolder by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<VaultFile?>(null) }
     var showImportOptions by remember { mutableStateOf(false) }
+    var showSortPicker by remember { mutableStateOf(false) }
 
     // File picker
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -153,6 +157,9 @@ fun VaultScreen(
                     if (!state.isSearchActive) {
                         IconButton(onClick = viewModel::toggleSearch) {
                             Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
+                        IconButton(onClick = { showSortPicker = true }) {
+                            Icon(Icons.Default.SortByAlpha, contentDescription = "Sort")
                         }
                         IconButton(onClick = viewModel::toggleGridView) {
                             Icon(
@@ -343,6 +350,46 @@ fun VaultScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewFolder = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Sort picker dialog
+    if (showSortPicker) {
+        AlertDialog(
+            onDismissRequest = { showSortPicker = false },
+            title = { Text("Sort by") },
+            text = {
+                Column {
+                    VaultSortOrder.entries.forEach { sort ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.setSortOrder(sort)
+                                    showSortPicker = false
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.RadioButton(
+                                selected = state.sortOrder == sort,
+                                onClick = {
+                                    viewModel.setSortOrder(sort)
+                                    showSortPicker = false
+                                }
+                            )
+                            Text(
+                                sort.label,
+                                modifier = Modifier.padding(start = 8.dp),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSortPicker = false }) { Text("Cancel") }
             }
         )
     }

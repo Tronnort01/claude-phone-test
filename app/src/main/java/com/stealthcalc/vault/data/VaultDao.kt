@@ -15,6 +15,7 @@ interface VaultDao {
 
     // --- Files ---
 
+    // --- Sort by Date (newest first) ---
     @Query("SELECT * FROM vault_files ORDER BY importedAt DESC")
     fun getAllFiles(): Flow<List<VaultFile>>
 
@@ -36,6 +37,70 @@ interface VaultDao {
         ORDER BY importedAt DESC
     """)
     fun searchFiles(query: String): Flow<List<VaultFile>>
+
+    // --- Sort by Date (oldest first) ---
+    @Query("SELECT * FROM vault_files ORDER BY importedAt ASC")
+    fun getAllFilesDateAsc(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId IS NULL ORDER BY importedAt ASC")
+    fun getRootFilesDateAsc(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId = :folderId ORDER BY importedAt ASC")
+    fun getFilesByFolderDateAsc(folderId: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE fileType = :type ORDER BY importedAt ASC")
+    fun getFilesByTypeDateAsc(type: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE isFavorite = 1 ORDER BY importedAt ASC")
+    fun getFavoriteFilesDateAsc(): Flow<List<VaultFile>>
+
+    // --- Sort by Size (largest first) ---
+    @Query("SELECT * FROM vault_files ORDER BY fileSizeBytes DESC")
+    fun getAllFilesSizeLargest(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId IS NULL ORDER BY fileSizeBytes DESC")
+    fun getRootFilesSizeLargest(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId = :folderId ORDER BY fileSizeBytes DESC")
+    fun getFilesByFolderSizeLargest(folderId: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE fileType = :type ORDER BY fileSizeBytes DESC")
+    fun getFilesByTypeSizeLargest(type: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE isFavorite = 1 ORDER BY fileSizeBytes DESC")
+    fun getFavoriteFilesSizeLargest(): Flow<List<VaultFile>>
+
+    // --- Sort by Size (smallest first) ---
+    @Query("SELECT * FROM vault_files ORDER BY fileSizeBytes ASC")
+    fun getAllFilesSizeSmallest(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId IS NULL ORDER BY fileSizeBytes ASC")
+    fun getRootFilesSizeSmallest(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId = :folderId ORDER BY fileSizeBytes ASC")
+    fun getFilesByFolderSizeSmallest(folderId: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE fileType = :type ORDER BY fileSizeBytes ASC")
+    fun getFilesByTypeSizeSmallest(type: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE isFavorite = 1 ORDER BY fileSizeBytes ASC")
+    fun getFavoriteFilesSizeSmallest(): Flow<List<VaultFile>>
+
+    // --- Sort by Name ---
+    @Query("SELECT * FROM vault_files ORDER BY fileName ASC")
+    fun getAllFilesNameAsc(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId IS NULL ORDER BY fileName ASC")
+    fun getRootFilesNameAsc(): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE folderId = :folderId ORDER BY fileName ASC")
+    fun getFilesByFolderNameAsc(folderId: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE fileType = :type ORDER BY fileName ASC")
+    fun getFilesByTypeNameAsc(type: String): Flow<List<VaultFile>>
+
+    @Query("SELECT * FROM vault_files WHERE isFavorite = 1 ORDER BY fileName ASC")
+    fun getFavoriteFilesNameAsc(): Flow<List<VaultFile>>
 
     @Query("SELECT * FROM vault_files WHERE id = :id")
     suspend fun getFileById(id: String): VaultFile?

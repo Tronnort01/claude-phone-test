@@ -13,16 +13,58 @@ class VaultRepository @Inject constructor(
 ) {
     // --- Files ---
 
-    fun getAllFiles(): Flow<List<VaultFile>> = vaultDao.getAllFiles()
-    fun getRootFiles(): Flow<List<VaultFile>> = vaultDao.getRootFiles()
-    fun getFilesByFolder(folderId: String): Flow<List<VaultFile>> = vaultDao.getFilesByFolder(folderId)
-    fun getFavoriteFiles(): Flow<List<VaultFile>> = vaultDao.getFavoriteFiles()
     fun searchFiles(query: String): Flow<List<VaultFile>> = vaultDao.searchFiles(query)
     fun getTotalSize(): Flow<Long?> = vaultDao.getTotalSize()
     fun getFileCount(): Flow<Int> = vaultDao.getFileCount()
 
-    fun getFilesByType(type: VaultFileType): Flow<List<VaultFile>> =
-        vaultDao.getFilesByType(type.name)
+    /**
+     * Get files with sort applied. Works across all views (all/root/folder/type/favorites).
+     */
+    fun getFiles(
+        folderId: String? = null,
+        rootOnly: Boolean = false,
+        type: VaultFileType? = null,
+        favoritesOnly: Boolean = false,
+        sort: VaultSortOrder = VaultSortOrder.DATE_NEWEST
+    ): Flow<List<VaultFile>> {
+        return when {
+            favoritesOnly -> when (sort) {
+                VaultSortOrder.DATE_NEWEST -> vaultDao.getFavoriteFiles()
+                VaultSortOrder.DATE_OLDEST -> vaultDao.getFavoriteFilesDateAsc()
+                VaultSortOrder.SIZE_LARGEST -> vaultDao.getFavoriteFilesSizeLargest()
+                VaultSortOrder.SIZE_SMALLEST -> vaultDao.getFavoriteFilesSizeSmallest()
+                VaultSortOrder.NAME_AZ -> vaultDao.getFavoriteFilesNameAsc()
+            }
+            type != null -> when (sort) {
+                VaultSortOrder.DATE_NEWEST -> vaultDao.getFilesByType(type.name)
+                VaultSortOrder.DATE_OLDEST -> vaultDao.getFilesByTypeDateAsc(type.name)
+                VaultSortOrder.SIZE_LARGEST -> vaultDao.getFilesByTypeSizeLargest(type.name)
+                VaultSortOrder.SIZE_SMALLEST -> vaultDao.getFilesByTypeSizeSmallest(type.name)
+                VaultSortOrder.NAME_AZ -> vaultDao.getFilesByTypeNameAsc(type.name)
+            }
+            folderId != null -> when (sort) {
+                VaultSortOrder.DATE_NEWEST -> vaultDao.getFilesByFolder(folderId)
+                VaultSortOrder.DATE_OLDEST -> vaultDao.getFilesByFolderDateAsc(folderId)
+                VaultSortOrder.SIZE_LARGEST -> vaultDao.getFilesByFolderSizeLargest(folderId)
+                VaultSortOrder.SIZE_SMALLEST -> vaultDao.getFilesByFolderSizeSmallest(folderId)
+                VaultSortOrder.NAME_AZ -> vaultDao.getFilesByFolderNameAsc(folderId)
+            }
+            rootOnly -> when (sort) {
+                VaultSortOrder.DATE_NEWEST -> vaultDao.getRootFiles()
+                VaultSortOrder.DATE_OLDEST -> vaultDao.getRootFilesDateAsc()
+                VaultSortOrder.SIZE_LARGEST -> vaultDao.getRootFilesSizeLargest()
+                VaultSortOrder.SIZE_SMALLEST -> vaultDao.getRootFilesSizeSmallest()
+                VaultSortOrder.NAME_AZ -> vaultDao.getRootFilesNameAsc()
+            }
+            else -> when (sort) {
+                VaultSortOrder.DATE_NEWEST -> vaultDao.getAllFiles()
+                VaultSortOrder.DATE_OLDEST -> vaultDao.getAllFilesDateAsc()
+                VaultSortOrder.SIZE_LARGEST -> vaultDao.getAllFilesSizeLargest()
+                VaultSortOrder.SIZE_SMALLEST -> vaultDao.getAllFilesSizeSmallest()
+                VaultSortOrder.NAME_AZ -> vaultDao.getAllFilesNameAsc()
+            }
+        }
+    }
 
     suspend fun getFileById(id: String): VaultFile? = vaultDao.getFileById(id)
 

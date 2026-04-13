@@ -9,6 +9,7 @@ import com.stealthcalc.vault.data.VaultRepository
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.model.VaultFolder
+import com.stealthcalc.vault.model.VaultSortOrder
 import com.stealthcalc.vault.service.FileEncryptionService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,6 +37,7 @@ data class VaultScreenState(
     val isSearchActive: Boolean = false,
     val isImporting: Boolean = false,
     val importProgress: String = "",
+    val sortOrder: VaultSortOrder = VaultSortOrder.DATE_NEWEST,
     val totalSize: Long = 0,
     val fileCount: Int = 0,
     val isGridView: Boolean = true,
@@ -55,21 +57,29 @@ class VaultViewModel @Inject constructor(
     private val _isImporting = MutableStateFlow(false)
     private val _importProgress = MutableStateFlow("")
     private val _isGridView = MutableStateFlow(true)
+    private val _sortOrder = MutableStateFlow(VaultSortOrder.DATE_NEWEST)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val files = combine(_currentFolderId, _filter, _searchQuery) { folderId, filter, query ->
-        Triple(folderId, filter, query)
-    }.flatMapLatest { (folderId, filter, query) ->
+    private val files = combine(_currentFolderId, _filter, _searchQuery, _sortOrder) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val folderId = values[0] as String?
+        val filter = values[1] as VaultFilter
+        val query = values[2] as String
+        val sort = values[3] as VaultSortOrder
+        FileQuery(folderId, filter, query, sort)
+    }.flatMapLatest { q ->
         when {
-            query.isNotBlank() -> repository.searchFiles(query)
-            filter == VaultFilter.PHOTOS -> repository.getFilesByType(VaultFileType.PHOTO)
-            filter == VaultFilter.VIDEOS -> repository.getFilesByType(VaultFileType.VIDEO)
-            filter == VaultFilter.DOCUMENTS -> repository.getFilesByType(VaultFileType.DOCUMENT)
-            filter == VaultFilter.FAVORITES -> repository.getFavoriteFiles()
-            folderId != null -> repository.getFilesByFolder(folderId)
-            else -> repository.getRootFiles()
+            q.query.isNotBlank() -> repository.searchFiles(q.query)
+            q.filter == VaultFilter.PHOTOS -> repository.getFiles(type = VaultFileType.PHOTO, sort = q.sort)
+            q.filter == VaultFilter.VIDEOS -> repository.getFiles(type = VaultFileType.VIDEO, sort = q.sort)
+            q.filter == VaultFilter.DOCUMENTS -> repository.getFiles(type = VaultFileType.DOCUMENT, sort = q.sort)
+            q.filter == VaultFilter.FAVORITES -> repository.getFiles(favoritesOnly = true, sort = q.sort)
+            q.folderId != null -> repository.getFiles(folderId = q.folderId, sort = q.sort)
+            else -> repository.getFiles(rootOnly = true, sort = q.sort)
         }
     }
+
+    private data class FileQuery(val folderId: String?, val filter: VaultFilter, val query: String, val sort: VaultSortOrder)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val folders = _currentFolderId.flatMapLatest { folderId ->
@@ -100,6 +110,7 @@ class VaultViewModel @Inject constructor(
             importProgress = values[7] as String,
             totalSize = (values[8] as Long?) ?: 0L,
             fileCount = values[9] as Int,
+            sortOrder = _sortOrder.value,
             isGridView = _isGridView.value,
         )
     }.stateIn(
@@ -107,6 +118,10 @@ class VaultViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = VaultScreenState()
     )
+
+    fun setSortOrder(sort: VaultSortOrder) {
+        _sortOrder.value = sort
+    }
 
     fun setFilter(filter: VaultFilter) {
         _filter.value = filter
