@@ -1,5 +1,9 @@
 # Project Context
 
+## Goal
+Build and deliver the debug APK file for this Android project. Every session should push code and confirm the GitHub Actions build produces the APK artifact.
+
+## What This Is
 Android project using Mozilla GeckoView as the browser engine.
 
 ## Build Process
