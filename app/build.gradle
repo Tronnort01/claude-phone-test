@@ -32,7 +32,8 @@ android {
 }
 
 dependencies {
-    // Fix: Updated GeckoView version from 123.0.20240212205514 (non-existent)
-    // to 123.0.20240213221259 (actual published version on maven.mozilla.org)
-    implementation 'org.mozilla.geckoview:geckoview-arm64-v8a:123.0.20240213221259'
+    // Fix: The geckoview-arm64-v8a artifact was discontinued after v117.
+    // For v118+, use the geckoview-omni-arm64-v8a artifact instead.
+    // Also corrected the version timestamp from 20240212205514 to 20240213221259.
+    implementation 'org.mozilla.geckoview:geckoview-omni-arm64-v8a:123.0.20240213221259'
 }
