@@ -25,11 +25,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug 2>&1 | tee build.log
-
-      - name: List APK output
-        if: always()
-        run: find app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK found"
+        run: |
+          ./gradlew assembleDebug 2>&1 | tee build.txt
+          echo "=== APK search ===" >> build.txt
+          find app/build/outputs -name "*.apk" >> build.txt 2>&1 || echo "No APK found" >> build.txt
 
       - name: Upload APK
         if: success()
@@ -44,4 +43,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: error-log
-          path: build.log
+          path: build.txt
+          if-no-files-found: warn
