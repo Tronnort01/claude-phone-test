@@ -20,6 +20,7 @@ import com.stealthcalc.notes.ui.NoteEditorScreen
 import com.stealthcalc.notes.ui.NotesListScreen
 import com.stealthcalc.stealth.ui.StealthHomeScreen
 import com.stealthcalc.tasks.ui.GoalsScreen
+import com.stealthcalc.settings.ui.SettingsScreen
 import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
@@ -208,7 +209,7 @@ fun StealthNavGraph(
         }
 
         composable(AppScreen.Settings.route) {
-            PlaceholderScreen(title = "Settings", onBack = { navController.popBackStack() })
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }
