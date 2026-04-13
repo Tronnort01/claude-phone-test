@@ -51,7 +51,7 @@ androidx-biometric = { group = "androidx.biometric", name = "biometric", version
 
 # Other
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
-geckoview = { group = "org.mozilla.geckoview", name = "geckoview", version.ref = "geckoview" }
+geckoview = { group = "org.mozilla.geckoview", name = "geckoview-arm64-v8a", version.ref = "geckoview" }
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
