@@ -20,6 +20,8 @@ import com.stealthcalc.notes.ui.NoteEditorScreen
 import com.stealthcalc.notes.ui.NotesListScreen
 import com.stealthcalc.stealth.ui.StealthHomeScreen
 import com.stealthcalc.tasks.ui.GoalsScreen
+import com.stealthcalc.browser.ui.BrowserScreen
+import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
 import com.stealthcalc.recorder.ui.RecordingsListScreen
 import com.stealthcalc.tasks.ui.HabitTrackerScreen
@@ -41,6 +43,7 @@ sealed class AppScreen(val route: String) {
     data object Recorder : AppScreen("recorder")
     data object RecordingsList : AppScreen("recordings_list")
     data object Browser : AppScreen("browser")
+    data object LinkVault : AppScreen("link_vault")
     data object Settings : AppScreen("settings")
 }
 
@@ -188,7 +191,20 @@ fun StealthNavGraph(
         }
 
         composable(AppScreen.Browser.route) {
-            PlaceholderScreen(title = "Private Browser", onBack = { navController.popBackStack() })
+            BrowserScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToVault = { navController.navigate(AppScreen.LinkVault.route) }
+            )
+        }
+
+        composable(AppScreen.LinkVault.route) {
+            LinkVaultScreen(
+                onBack = { navController.popBackStack() },
+                onOpenLink = { url ->
+                    navController.popBackStack()
+                    // The browser will load this URL on next compose
+                }
+            )
         }
 
         composable(AppScreen.Settings.route) {

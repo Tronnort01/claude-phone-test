@@ -11,6 +11,12 @@ import com.stealthcalc.notes.model.NoteAttachment
 import com.stealthcalc.notes.model.NoteFolder
 import com.stealthcalc.notes.model.NoteTag
 import com.stealthcalc.notes.model.NoteTagCrossRef
+import com.stealthcalc.browser.data.LinkCollectionDao
+import com.stealthcalc.browser.data.SavedLinkDao
+import com.stealthcalc.browser.model.LinkCollection
+import com.stealthcalc.browser.model.LinkTag
+import com.stealthcalc.browser.model.LinkTagCrossRef
+import com.stealthcalc.browser.model.SavedLink
 import com.stealthcalc.recorder.data.RecordingDao
 import com.stealthcalc.recorder.model.Recording
 import com.stealthcalc.tasks.data.GoalDao
@@ -38,8 +44,12 @@ import com.stealthcalc.tasks.model.TaskList
         Goal::class,
         Milestone::class,
         Recording::class,
+        SavedLink::class,
+        LinkCollection::class,
+        LinkTag::class,
+        LinkTagCrossRef::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -52,4 +62,6 @@ abstract class StealthDatabase : RoomDatabase() {
     abstract fun habitDao(): HabitDao
     abstract fun goalDao(): GoalDao
     abstract fun recordingDao(): RecordingDao
+    abstract fun savedLinkDao(): SavedLinkDao
+    abstract fun linkCollectionDao(): LinkCollectionDao
 }
