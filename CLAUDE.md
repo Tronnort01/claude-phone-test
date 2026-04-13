@@ -1,7 +1,7 @@
 # Project Context
 
 ## Goal
-Build and deliver the debug APK file for this Android project. Every session should push code and confirm the GitHub Actions build produces the APK artifact.
+Build and deliver the debug APK file. Every session should push code and confirm the GitHub Actions build produces the APK artifact. Do NOT start from scratch - always check what already exists in the repo first.
 
 ## What This Is
 Android project using Mozilla GeckoView as the browser engine.
@@ -10,9 +10,20 @@ Android project using Mozilla GeckoView as the browser engine.
 
 Builds run via GitHub Actions (`.github/workflows/build.yml`). Push to any `claude/**` or `master` branch triggers a build automatically. The workflow also supports `workflow_dispatch` for manual triggers.
 
-The APK is uploaded as a GitHub Actions artifact named `app-debug`. On failure, build logs are uploaded as `error-log` artifact.
-
 Do not build locally - use GitHub Actions.
+
+### Artifacts
+- **On success**: `app-debug` artifact containing `app/build/outputs/apk/debug/app-debug.apk`
+- **On failure**: `error-log` artifact containing `build.log`
+
+### Workflow steps (do not recreate - edit the existing file):
+1. actions/checkout@v4
+2. actions/setup-java@v4 (JDK 17, temurin)
+3. gradle/actions/setup-gradle@v4
+4. chmod +x gradlew
+5. ./gradlew assembleDebug 2>&1 | tee build.log
+6. Upload APK artifact (on success)
+7. Upload error log artifact (on failure)
 
 ## Build System
 
@@ -29,7 +40,7 @@ Do not build locally - use GitHub Actions.
 
 ## Repository Layout
 
-- `.github/workflows/build.yml` - CI workflow
+- `.github/workflows/build.yml` - CI workflow (do not recreate, edit in place)
 - `settings.gradle` - Repos: google(), mavenCentral(), maven.mozilla.org
 - `build.gradle` - Root build config
 - `app/build.gradle` - App module with GeckoView dependency
