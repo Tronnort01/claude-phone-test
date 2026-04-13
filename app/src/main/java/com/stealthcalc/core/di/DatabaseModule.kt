@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.stealthcalc.core.data.StealthDatabase
 import com.stealthcalc.core.encryption.KeyStoreManager
+import com.stealthcalc.recorder.data.RecordingDao
 import com.stealthcalc.notes.data.NoteDao
 import com.stealthcalc.notes.data.NoteFolderDao
 import com.stealthcalc.notes.data.NoteTagDao
@@ -62,4 +63,7 @@ object DatabaseModule {
 
     @Provides
     fun provideGoalDao(db: StealthDatabase): GoalDao = db.goalDao()
+
+    @Provides
+    fun provideRecordingDao(db: StealthDatabase): RecordingDao = db.recordingDao()
 }

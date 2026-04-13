@@ -1,6 +1,8 @@
 package com.stealthcalc.core.data
 
 import androidx.room.TypeConverter
+import com.stealthcalc.recorder.model.CameraFacing
+import com.stealthcalc.recorder.model.RecordingType
 import com.stealthcalc.tasks.model.Priority
 import com.stealthcalc.tasks.model.Recurrence
 import com.stealthcalc.tasks.model.RecurrenceType
@@ -37,6 +39,20 @@ class Converters {
         } else null
         return Recurrence(type, interval, days)
     }
+
+    // RecordingType
+    @TypeConverter
+    fun fromRecordingType(type: RecordingType): String = type.name
+
+    @TypeConverter
+    fun toRecordingType(value: String): RecordingType = RecordingType.valueOf(value)
+
+    // CameraFacing
+    @TypeConverter
+    fun fromCameraFacing(facing: CameraFacing?): String? = facing?.name
+
+    @TypeConverter
+    fun toCameraFacing(value: String?): CameraFacing? = value?.let { CameraFacing.valueOf(it) }
 
     // Set<String> for tags
     @TypeConverter

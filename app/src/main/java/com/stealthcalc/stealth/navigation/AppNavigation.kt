@@ -20,6 +20,8 @@ import com.stealthcalc.notes.ui.NoteEditorScreen
 import com.stealthcalc.notes.ui.NotesListScreen
 import com.stealthcalc.stealth.ui.StealthHomeScreen
 import com.stealthcalc.tasks.ui.GoalsScreen
+import com.stealthcalc.recorder.ui.RecorderScreen
+import com.stealthcalc.recorder.ui.RecordingsListScreen
 import com.stealthcalc.tasks.ui.HabitTrackerScreen
 import com.stealthcalc.tasks.ui.TaskDetailScreen
 import com.stealthcalc.tasks.ui.TaskListScreen
@@ -37,6 +39,7 @@ sealed class AppScreen(val route: String) {
     data object Habits : AppScreen("habits")
     data object Goals : AppScreen("goals")
     data object Recorder : AppScreen("recorder")
+    data object RecordingsList : AppScreen("recordings_list")
     data object Browser : AppScreen("browser")
     data object Settings : AppScreen("settings")
 }
@@ -174,7 +177,14 @@ fun StealthNavGraph(
         }
 
         composable(AppScreen.Recorder.route) {
-            PlaceholderScreen(title = "Recorder", onBack = { navController.popBackStack() })
+            RecorderScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToRecordings = { navController.navigate(AppScreen.RecordingsList.route) }
+            )
+        }
+
+        composable(AppScreen.RecordingsList.route) {
+            RecordingsListScreen(onBack = { navController.popBackStack() })
         }
 
         composable(AppScreen.Browser.route) {
