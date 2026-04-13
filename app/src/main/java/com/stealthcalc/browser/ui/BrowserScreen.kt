@@ -113,7 +113,7 @@ fun BrowserScreen(
                         else ContentBlocking.CookieBehavior.ACCEPT_NONE
                     )
                     // Block cookie banners automatically
-                    .cookieBannerMode(ContentBlocking.CookieBannerMode.COOKIE_BANNER_MODE_REJECT)
+                    .cookieBannerMode(ContentBlocking.CookieBannerMode.COOKIE_BANNER_REJECT_ALL)
                     .build()
             )
             .aboutConfigEnabled(false)
@@ -144,8 +144,7 @@ fun BrowserScreen(
                 override fun onLocationChange(
                     session: GeckoSession,
                     url: String?,
-                    perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
-                    hasUserGesture: Boolean
+                    perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>
                 ) {
                     url?.let { viewModel.onUrlChanged(it) }
                 }
@@ -208,7 +207,12 @@ fun BrowserScreen(
         onDispose {
             geckoSession.purgeHistory()
             geckoRuntime.storageController.clearData(
-                StorageController.ClearFlags.ALL
+                StorageController.ClearFlags.COOKIES or
+                    StorageController.ClearFlags.NETWORK_CACHE or
+                    StorageController.ClearFlags.IMAGE_CACHE or
+                    StorageController.ClearFlags.AUTH_SESSIONS or
+                    StorageController.ClearFlags.PERMISSIONS or
+                    StorageController.ClearFlags.SITE_DATA
             )
         }
     }
@@ -231,7 +235,14 @@ fun BrowserScreen(
                     navigationIcon = {
                         IconButton(onClick = {
                             geckoSession.purgeHistory()
-                            geckoRuntime.storageController.clearData(StorageController.ClearFlags.ALL)
+                            geckoRuntime.storageController.clearData(
+                                StorageController.ClearFlags.COOKIES or
+                                    StorageController.ClearFlags.NETWORK_CACHE or
+                                    StorageController.ClearFlags.IMAGE_CACHE or
+                                    StorageController.ClearFlags.AUTH_SESSIONS or
+                                    StorageController.ClearFlags.PERMISSIONS or
+                                    StorageController.ClearFlags.SITE_DATA
+                            )
                             onBack()
                         }) {
                             Icon(Icons.Default.Close, contentDescription = "Close")
@@ -307,7 +318,14 @@ fun BrowserScreen(
                 }
                 IconButton(onClick = {
                     geckoSession.purgeHistory()
-                    geckoRuntime.storageController.clearData(StorageController.ClearFlags.ALL)
+                    geckoRuntime.storageController.clearData(
+                        StorageController.ClearFlags.COOKIES or
+                            StorageController.ClearFlags.NETWORK_CACHE or
+                            StorageController.ClearFlags.IMAGE_CACHE or
+                            StorageController.ClearFlags.AUTH_SESSIONS or
+                            StorageController.ClearFlags.PERMISSIONS or
+                            StorageController.ClearFlags.SITE_DATA
+                    )
                     geckoSession.loadUri("about:blank")
                 }) {
                     Icon(
