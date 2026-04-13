@@ -76,8 +76,8 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.biometric)
 
-    // Browser
-    implementation(libs.androidx.webkit)
+    // Browser — Mozilla GeckoView (Firefox engine, NOT Chrome)
+    implementation(libs.geckoview)
 
     // Background work
     implementation(libs.androidx.work.runtime)
