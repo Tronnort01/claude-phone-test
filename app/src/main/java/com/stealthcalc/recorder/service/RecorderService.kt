@@ -178,6 +178,15 @@ class RecorderService : Service() {
         } catch (e: Exception) {
             cleanupRecorder()
             _isRecording.value = false
+            // Previously this failure was completely silent — which left
+            // the user with a "dead" record button. Log it so the crash-log
+            // export can surface the root cause (e.g. missing RECORD_AUDIO
+            // grant, camera busy, foreground service restrictions).
+            AppLogger.log(
+                applicationContext,
+                "recorder",
+                "startRecording failed (${type.name}): ${e.javaClass.simpleName}: ${e.message}"
+            )
         }
     }
 

@@ -1,5 +1,11 @@
 package com.stealthcalc.recorder.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -44,8 +50,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stealthcalc.recorder.model.CameraFacing
@@ -61,6 +69,49 @@ fun RecorderScreen(
     viewModel: RecorderViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // MediaRecorder needs RECORD_AUDIO for all recordings and CAMERA for
+    // video; API 33+ also needs POST_NOTIFICATIONS so the foreground
+    // notification can show. The Android manifest only DECLARES these;
+    // they still require runtime grant on API 23+. Without this launcher
+    // the service started but MediaRecorder.start() silently threw
+    // SecurityException, leaving the record button visually "dead".
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val allGranted = results.values.all { it }
+        if (allGranted) {
+            viewModel.startRecording()
+        } else {
+            val denied = results.filterValues { !it }.keys.joinToString()
+            Toast.makeText(
+                context,
+                "Recording needs: $denied",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    val startRecordingWithPermissions: () -> Unit = {
+        val needed = buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+            if (state.selectedMode == RecordingType.VIDEO) {
+                add(Manifest.permission.CAMERA)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        val missing = needed.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            viewModel.startRecording()
+        } else {
+            permissionLauncher.launch(missing.toTypedArray())
+        }
+    }
 
     AnimatedContent(
         targetState = state.showCoverScreen,
@@ -78,7 +129,7 @@ fun RecorderScreen(
                 onBack = onBack,
                 onSelectMode = viewModel::selectMode,
                 onSelectCamera = viewModel::selectCamera,
-                onStartRecording = viewModel::startRecording,
+                onStartRecording = startRecordingWithPermissions,
                 onStopRecording = viewModel::stopRecording,
                 onShowCover = viewModel::enterCoverScreen,
                 onNavigateToRecordings = onNavigateToRecordings,
