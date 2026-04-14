@@ -25,6 +25,7 @@ import com.stealthcalc.settings.ui.SettingsScreen
 import com.stealthcalc.vault.data.VaultRepository
 import com.stealthcalc.vault.service.FileEncryptionService
 import com.stealthcalc.vault.ui.SecureCameraScreen
+import com.stealthcalc.vault.ui.VaultFileViewerScreen
 import com.stealthcalc.vault.ui.VaultScreen
 import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
@@ -52,6 +53,9 @@ sealed class AppScreen(val route: String) {
     data object LinkVault : AppScreen("link_vault")
     data object Vault : AppScreen("vault")
     data object SecureCamera : AppScreen("secure_camera")
+    data object FileViewer : AppScreen("vault_file/{fileId}") {
+        fun createRoute(fileId: String) = "vault_file/$fileId"
+    }
     data object Settings : AppScreen("settings")
 }
 
@@ -246,9 +250,22 @@ fun StealthNavGraph(
         composable(AppScreen.Vault.route) {
             VaultScreen(
                 onBack = { navController.popBackStack() },
-                onOpenFile = { /* TODO: open encrypted file viewer */ },
+                onOpenFile = { file ->
+                    navController.navigate(AppScreen.FileViewer.createRoute(file.id))
+                },
                 onOpenCamera = { navController.navigate(AppScreen.SecureCamera.route) }
             )
+        }
+
+        composable(
+            route = AppScreen.FileViewer.route,
+            arguments = listOf(
+                androidx.navigation.navArgument("fileId") {
+                    type = androidx.navigation.NavType.StringType
+                }
+            )
+        ) {
+            VaultFileViewerScreen(onBack = { navController.popBackStack() })
         }
 
         composable(AppScreen.SecureCamera.route) {
