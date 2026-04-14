@@ -1,5 +1,28 @@
 # StealthCalc — Project Context
 
+## New-session checklist (read this first, every time)
+
+Before touching any code on this project:
+
+1. **Read these docs in order, do NOT scan the whole codebase:**
+   - This file (CLAUDE.md) — you're in it.
+   - `docs/ANDROID_BUILD_LESSONS.md` — gotchas we've already hit (FGS types on API 34+, photo picker vs `ACTION_PICK`, Compose API drift, delegated-property smart cast, etc.). Check the tables before writing anything new in those areas.
+   - `docs/ISSUES_FOUND.md` and `docs/FIX_PLAN.md` — the three rounds of already-fixed bugs with commit SHAs. Read the Status tables first; drill into a specific issue only if the user's new task relates to it.
+
+2. **Build pipeline:** **GitHub Actions only.** Never run `./gradlew` locally — the container proxy blocks `dl.google.com` and `maven.mozilla.org`. Every push to `master` triggers `.github/workflows/build-apk.yml`; APK artifact is `StealthCalc-debug`, build log is uploaded on failure.
+
+3. **Commit style:** one fix per commit, push after each so CI runs are bisectable. Work on branch `master` unless I explicitly say otherwise.
+
+4. **When I report a crash or runtime bug:** ask me to paste the export from **Settings → Diagnostics → Export crash log** (the `app.txt` file) BEFORE diagnosing. `[FATAL]` blocks have device/build/stack; `[recorder]` / `[vault]` lines surface silent failures.
+
+5. **Code reads:** only the specific files the task touches. Use Grep/Glob for call sites. Reserve Explore agents for genuinely uncertain, multi-module tasks.
+
+6. **At end of session:** if I ask you to "update context" (or before I do), extend `docs/ISSUES_FOUND.md` / `docs/FIX_PLAN.md` with a new "Round N" block for whatever shipped, add any new gotchas to `docs/ANDROID_BUILD_LESSONS.md`, and push to `master`. The docs get smarter every session — keep them that way.
+
+My normal starting phrase will be short (e.g. "read context, here's my feedback: …"). Trust this file to have told you what to do; ask me only if the task is ambiguous.
+
+---
+
 ## What This Is
 A personal stealth productivity Android app disguised as a calculator. Enter a secret PIN on the calculator keypad + press `=` to unlock a hidden suite of encrypted tools. Built with Kotlin + Jetpack Compose + Hilt + Room/SQLCipher.
 
