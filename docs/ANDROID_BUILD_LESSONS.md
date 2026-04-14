@@ -118,6 +118,21 @@ Bridge from ViewModel to Compose launcher: expose `StateFlow<IntentSender?>` fro
 |---|---|---|
 | `Smart cast to 'Bitmap' is impossible, because 'thumbBitmap' is a delegated property` | `val x by produceState<T?>(...)` and `var y by remember { mutableStateOf<T?>(null) }` are delegated properties (read via `getValue()`). Kotlin can't prove the getter is stable between a null-check and a later read, so `if (x != null) { x.foo() }` won't smart-cast | Capture into a plain local val: `val captured = x; if (captured != null) captured.foo()`. Or use safe-call + let: `x?.let { it.foo() }` |
 
+### Foreground services on Android 14+ (API 34+)
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `SecurityException: Starting FGS with type camera ... requires permissions: all of [FOREGROUND_SERVICE_CAMERA] and any of [CAMERA, SYSTEM_CAMERA]` | Manifest declares `foregroundServiceType="microphone\|camera"` (the MAXIMUM possible types). `startForeground()` without an explicit type promotes with the union — but on Android 14+ the runtime type must be a SUBSET of manifest AND all types' permissions must be granted. For audio-only sessions CAMERA isn't granted, so the promotion fails | At runtime call `startForeground(id, notification, fgsType)` with only the types actually needed. Use `ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE` for audio, `MICROPHONE or CAMERA` for video (API 29+ only — below that use the 2-arg overload) |
+| `ForegroundServiceDidNotStartInTimeException: Context.startForegroundService() did not then call Service.startForeground()` crashes the whole app | `startForegroundService()` has a ~5–10 second deadline for the service to call `startForeground()`. If your service does blocking setup work (MediaRecorder.prepare/start, CameraManager.openCamera, etc.) FIRST and it throws, the catch block logs the error but the deadline still elapses with no `startForeground()` call — system kills the process | Call `startForeground()` as the FIRST thing in `onStartCommand` (before any MediaRecorder/Camera work). Do the failable setup afterwards; if it throws, catch and call `stopForeground(STOP_FOREGROUND_REMOVE) + stopSelf()` to unwind cleanly |
+
+### MediaStore deletion + picker URIs
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `MediaStore.createDeleteRequest(uris)` creates a `PendingIntent`, user approves, **nothing is deleted** | On Android 13+ the system photo picker (`ActivityResultContracts.GetMultipleContents` → `ACTION_GET_CONTENT` with image/* mime type) returns ephemeral `content://media/picker/...` URIs that are read-only grants — NOT MediaStore rows. `createDeleteRequest` silently succeeds against these with 0 rows affected | Use `Intent.ACTION_PICK` with data URI = `MediaStore.Images.Media.EXTERNAL_CONTENT_URI` (or Video/Audio). This opens the **legacy gallery picker** (stock Gallery / Photos) which returns real `content://media/external/...` URIs that `createDeleteRequest` can delete. `ACTION_PICK` does NOT redirect to the photo picker the way `ACTION_GET_CONTENT` does |
+| Even with `READ_MEDIA_IMAGES` granted, querying MediaStore for a picker URI's `DISPLAY_NAME` + `SIZE` returns zero matches | Photo-picker URIs are intentionally unmappable to MediaStore rows; the picker privacy-strips the mapping. No amount of permission grants lets you look them up | Don't rely on resolving picker URIs to MediaStore. Use `ACTION_PICK` with MediaStore URI up-front so the URI IS a MediaStore URI |
+| `Intent.ACTION_PICK` throws `ActivityNotFoundException` on a device with no gallery app | Rare, but possible (stripped ROM) | Wrap the `launcher.launch(intent)` call in try/catch; Toast the user that no gallery app is available. The import flow can still accept file-provider URIs via the separate OpenMultipleDocuments fallback |
+
 ### Build / Workflow
 
 | Error | Cause | Fix |
