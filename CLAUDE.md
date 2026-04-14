@@ -1,0 +1,53 @@
+# Project Context
+
+## Goal
+Build and deliver the debug APK file. Every session should push code and confirm the GitHub Actions build produces the APK artifact. Do NOT start from scratch - always check what already exists in the repo first.
+
+## What This Is
+Android project using Mozilla GeckoView as the browser engine.
+
+## Build Process
+
+Builds run via GitHub Actions (`.github/workflows/build.yml`). Push to any `claude/**` or `master` branch triggers a build automatically. The workflow also supports `workflow_dispatch` for manual triggers.
+
+Do not build locally - use GitHub Actions.
+
+### Artifacts
+- **On success**: `app-debug` artifact containing `app/build/outputs/apk/debug/app-debug.apk`
+- **On failure**: `error-log` artifact containing `build.log`
+
+### Workflow steps (do not recreate - edit the existing file):
+1. actions/checkout@v4
+2. actions/setup-java@v4 (JDK 17, temurin)
+3. gradle/actions/setup-gradle@v4
+4. chmod +x gradlew
+5. ./gradlew assembleDebug 2>&1 | tee build.log
+6. Upload APK artifact (on success)
+7. Upload error log artifact (on failure)
+
+## Build System
+
+- Gradle 8.7 (wrapper in repo)
+- Android Gradle Plugin 8.3.0
+- Kotlin 1.9.22, Java 17
+- compileSdk 34, minSdk 24, targetSdk 34
+
+## Dependencies
+
+- **GeckoView**: `org.mozilla.geckoview:geckoview-omni-arm64-v8a:123.0.20240213221259`
+  - Repository: `https://maven.mozilla.org/maven2/`
+  - `geckoview-arm64-v8a` (non-omni) was discontinued after v117. Use `geckoview-omni-arm64-v8a` for v118+.
+
+## Repository Layout
+
+- `.github/workflows/build.yml` - CI workflow (do not recreate, edit in place)
+- `settings.gradle` - Repos: google(), mavenCentral(), maven.mozilla.org
+- `build.gradle` - Root build config
+- `app/build.gradle` - App module with GeckoView dependency
+- `gradlew` + `gradle/wrapper/` - Gradle wrapper
+- `app/src/main/` - Android manifest and Kotlin sources
+
+## Branch
+
+- Feature: `claude/fix-geckoview-dependency-eCOOU`
+- Base: `master`

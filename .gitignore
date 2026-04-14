@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .env
 .venv/
+
+# Gradle
+.gradle/
+build/
+local.properties
