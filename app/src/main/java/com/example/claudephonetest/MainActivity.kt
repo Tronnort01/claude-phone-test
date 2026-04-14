@@ -9,6 +9,7 @@ import org.mozilla.geckoview.GeckoView
 class MainActivity : Activity() {
 
     private lateinit var geckoSession: GeckoSession
+    private var canGoBack = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -18,9 +19,26 @@ class MainActivity : Activity() {
 
         val runtime = GeckoRuntime.getDefault(this)
         geckoSession = GeckoSession()
+
+        geckoSession.navigationDelegate = object : GeckoSession.NavigationDelegate {
+            override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                this@MainActivity.canGoBack = canGoBack
+            }
+        }
+
         geckoSession.open(runtime)
         geckoView.setSession(geckoSession)
         geckoSession.loadUri("https://www.mozilla.org")
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (canGoBack) {
+            geckoSession.goBack()
+        } else {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+        }
     }
 
     override fun onDestroy() {
