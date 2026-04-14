@@ -63,6 +63,7 @@ app/src/main/java/com/stealthcalc/
 ```
 
 ## Important Notes
+- **Read `docs/ANDROID_BUILD_LESSONS.md` first** — running log of errors and fixes across Android projects, plus a pre-push checklist.
 - The `settings.gradle.kts` uses `dependencyResolutionManagement` (not `dependencyResolution`)
 - Mozilla Maven repo: `https://maven.mozilla.org/maven2`
 - GeckoView requires the omni arch suffix for v118+: `geckoview-omni-arm64-v8a`, NOT plain `geckoview` and NOT the non-omni `geckoview-arm64-v8a`
