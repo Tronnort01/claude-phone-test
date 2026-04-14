@@ -19,8 +19,10 @@ import java.util.Locale
  */
 object AppLogger {
     private const val LOG_DIR = "logs"
-    private const val LOG_FILE = "app.log"
-    private const val ROTATED_FILE = "app.log.1"
+    // .txt so the log opens in any text viewer on-device. Previously .log,
+    // which many Android viewers refuse to open without a dedicated app.
+    private const val LOG_FILE = "app.txt"
+    private const val ROTATED_FILE = "app.txt.1"
     private const val MAX_BYTES = 1_000_000L // 1 MB
 
     private val isoFormat: SimpleDateFormat by lazy {
