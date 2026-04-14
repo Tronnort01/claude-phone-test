@@ -57,6 +57,7 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.viewmodel.VaultFileViewerViewModel
@@ -199,17 +200,66 @@ private fun PhotoView(tempFile: File) {
 @Composable
 private fun VideoPlayer(tempFile: File) {
     val context = LocalContext.current
+    var videoError by remember(tempFile.absolutePath) { mutableStateOf<String?>(null) }
+
+    if (videoError != null) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "Video can't be played.",
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "The recording may be corrupt or in an unsupported format. " +
+                    "Details saved to the crash log (Settings → Diagnostics → Export crash log).",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        return
+    }
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = {
             VideoView(context).apply {
-                setVideoPath(tempFile.absolutePath)
+                // VideoView.setVideoPath is generally forgiving but can
+                // still throw from underlying MediaPlayer.setDataSource.
+                // Wrap + fail gracefully so a bad file doesn't crash.
+                runCatching { setVideoPath(tempFile.absolutePath) }
+                    .onFailure { e ->
+                        AppLogger.log(
+                            context,
+                            "vault",
+                            "VideoPlayer setVideoPath failed: ${e.javaClass.simpleName}: ${e.message} " +
+                                "file=${tempFile.absolutePath} exists=${tempFile.exists()} " +
+                                "size=${if (tempFile.exists()) tempFile.length() else -1L}"
+                        )
+                        videoError = e.message ?: "Failed to load video"
+                    }
                 val controller = MediaController(context)
                 controller.setAnchorView(this)
                 setMediaController(controller)
                 setOnPreparedListener { mp ->
                     mp.isLooping = false
                     start()
+                }
+                setOnErrorListener { _, what, extra ->
+                    AppLogger.log(
+                        context,
+                        "vault",
+                        "VideoPlayer onError what=$what extra=$extra " +
+                            "file=${tempFile.absolutePath} size=${tempFile.length()}"
+                    )
+                    videoError = "Playback error ($what/$extra)"
+                    true  // we handled it; suppress the system error dialog
                 }
             }
         },
@@ -218,12 +268,61 @@ private fun VideoPlayer(tempFile: File) {
 
 @Composable
 private fun AudioPlayer(file: VaultFile, tempFile: File) {
-    val player = remember(tempFile.absolutePath) {
-        MediaPlayer().apply {
-            setDataSource(tempFile.absolutePath)
-            prepare()
+    val context = LocalContext.current
+    // Build the MediaPlayer lazily and, crucially, catch any setup
+    // failure. MediaPlayer.prepare() is synchronous and can throw
+    // IOException (status=0x1 etc.) on a corrupt / empty / unsupported
+    // file — previously that exception propagated through the Compose
+    // recomposition and crashed the whole activity (see crash log
+    // "Prepare failed.: status=0x1" at this line). We now surface the
+    // failure as an error UI state and log the diagnostic so it's
+    // visible from Settings → Diagnostics → Export crash log.
+    val prepareResult = remember(tempFile.absolutePath) {
+        runCatching {
+            MediaPlayer().apply {
+                setDataSource(tempFile.absolutePath)
+                prepare()
+            }
+        }.onFailure { e ->
+            AppLogger.log(
+                context,
+                "vault",
+                "AudioPlayer prepare failed: ${e.javaClass.simpleName}: ${e.message} " +
+                    "file=${tempFile.absolutePath} exists=${tempFile.exists()} " +
+                    "size=${if (tempFile.exists()) tempFile.length() else -1L}"
+            )
         }
     }
+    val player = prepareResult.getOrNull()
+
+    if (player == null) {
+        DisposableEffect(tempFile.absolutePath) {
+            onDispose { /* nothing to release */ }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                file.fileName,
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Audio can't be played. The recording may be corrupt or " +
+                    "in an unsupported format. Details saved to the crash log " +
+                    "(Settings → Diagnostics → Export crash log).",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        return
+    }
+
     var isPlaying by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     val lifecycleOwner = LocalLifecycleOwner.current

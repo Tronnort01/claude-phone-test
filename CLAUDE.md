@@ -11,13 +11,13 @@ Before touching any code on this project:
 
 2. **Build pipeline:** **GitHub Actions only.** Never run `./gradlew` locally — the container proxy blocks `dl.google.com` and `maven.mozilla.org`. Every push to `master` triggers `.github/workflows/build-apk.yml`; APK artifact is `StealthCalc-debug`, build log is uploaded on failure.
 
-3. **Commit style:** one fix per commit, push after each so CI runs are bisectable. Work on branch `master` unless I explicitly say otherwise.
+3. **Branch workflow:** the finished app lives on `master`. For every new feature / bug-fix round, branch off the latest `master` with a descriptive name (e.g. `claude/fix-audio-viewer-crash`), commit per fix, push the branch, then **fast-forward merge back into `master` and push `master`** when the round is done. GitHub Actions builds an APK on every push to any `claude/**` branch AND on every push to `master`. The rule "never push to other branches" from earlier sessions was specifically about me creating side/empty projects — merging a feature branch back to `master` is expected. Don't amend / force-push.
 
 4. **When I report a crash or runtime bug:** ask me to paste the export from **Settings → Diagnostics → Export crash log** (the `app.txt` file) BEFORE diagnosing. `[FATAL]` blocks have device/build/stack; `[recorder]` / `[vault]` lines surface silent failures.
 
 5. **Code reads:** only the specific files the task touches. Use Grep/Glob for call sites. Reserve Explore agents for genuinely uncertain, multi-module tasks.
 
-6. **At end of session:** if I ask you to "update context" (or before I do), extend `docs/ISSUES_FOUND.md` / `docs/FIX_PLAN.md` with a new "Round N" block for whatever shipped, add any new gotchas to `docs/ANDROID_BUILD_LESSONS.md`, and push to `master`. The docs get smarter every session — keep them that way.
+6. **At end of session:** if I ask you to "update context" (or before I do), extend `docs/ISSUES_FOUND.md` / `docs/FIX_PLAN.md` with a new "Round N" block for whatever shipped, add any new gotchas to `docs/ANDROID_BUILD_LESSONS.md`, merge the feature branch back to `master`, and push `master`. The docs get smarter every session — keep them that way.
 
 My normal starting phrase will be short (e.g. "read context, here's my feedback: …"). Trust this file to have told you what to do; ask me only if the task is ambiguous.
 
