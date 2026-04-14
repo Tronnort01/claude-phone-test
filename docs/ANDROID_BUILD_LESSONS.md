@@ -125,6 +125,35 @@ Bridge from ViewModel to Compose launcher: expose `StateFlow<IntentSender?>` fro
 | `SecurityException: Starting FGS with type camera ... requires permissions: all of [FOREGROUND_SERVICE_CAMERA] and any of [CAMERA, SYSTEM_CAMERA]` | Manifest declares `foregroundServiceType="microphone\|camera"` (the MAXIMUM possible types). `startForeground()` without an explicit type promotes with the union — but on Android 14+ the runtime type must be a SUBSET of manifest AND all types' permissions must be granted. For audio-only sessions CAMERA isn't granted, so the promotion fails | At runtime call `startForeground(id, notification, fgsType)` with only the types actually needed. Use `ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE` for audio, `MICROPHONE or CAMERA` for video (API 29+ only — below that use the 2-arg overload) |
 | `ForegroundServiceDidNotStartInTimeException: Context.startForegroundService() did not then call Service.startForeground()` crashes the whole app | `startForegroundService()` has a ~5–10 second deadline for the service to call `startForeground()`. If your service does blocking setup work (MediaRecorder.prepare/start, CameraManager.openCamera, etc.) FIRST and it throws, the catch block logs the error but the deadline still elapses with no `startForeground()` call — system kills the process | Call `startForeground()` as the FIRST thing in `onStartCommand` (before any MediaRecorder/Camera work). Do the failable setup afterwards; if it throws, catch and call `stopForeground(STOP_FOREGROUND_REMOVE) + stopSelf()` to unwind cleanly |
 
+### CameraX VideoCapture in a Service
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Video recording via `MediaRecorder` with `setVideoSource(MediaRecorder.VideoSource.CAMERA)` silently produces an empty/truncated MP4 | `VideoSource.CAMERA` is the LEGACY Camera1 path. It requires `Camera.open()` + `Camera.unlock()` + `MediaRecorder.setCamera(camera)` before `prepare()`. If you don't hold a Camera instance, `start()` throws `RuntimeException` on modern Android — which is easy to catch-and-log and thereby "disappear" | Use CameraX `Recorder` + `VideoCapture` instead: `val videoCapture = VideoCapture.withOutput(Recorder.Builder().setQualitySelector(...).build())`, `bindToLifecycle(lifecycleOwner, selector, videoCapture)`, then `videoCapture.output.prepareRecording(ctx, FileOutputOptions.Builder(file).build()).withAudioEnabled().start(executor, listener)`. The listener delivers `VideoRecordEvent.Start` and `.Finalize` — mirror your state machine against those |
+| `ProcessCameraProvider.bindToLifecycle(this, ...)` throws "LifecycleOwner is destroyed" from inside a `Service` | A plain `Service` is not a `LifecycleOwner`, and CameraX needs one to bind camera use cases | Extend `androidx.lifecycle.LifecycleService` instead of `Service`. Add `androidx.lifecycle:lifecycle-service` dep. Override `onBind(intent: Intent): IBinder?` with non-null Intent and `super.onBind(intent)` first. Override `onStartCommand` with `super.onStartCommand(intent, flags, startId)` first. Otherwise the lifecycle state machine drifts and CameraX's bind silently sees STATE_INITIALIZED → fails |
+| Video recording starts but when `stopRecording()` is called nothing saves | `Recording.stop()` does NOT block and does NOT deliver the finalized file synchronously. The file isn't finalized until `VideoRecordEvent.Finalize` fires on the event listener | Drive the vault-persist chain from the `VideoRecordEvent.Finalize` case of your listener, not from the `stop()` call site. `Finalize` carries `event.hasError()`, `event.error`, `event.cause` so error handling is explicit. `stopRecording()` should only call `videoRecording?.stop()` and let Finalize drive the rest |
+| FGS deadline crash even with CameraX because `ProcessCameraProvider.getInstance().addListener(...)` is async | `getInstance()` returns a `ListenableFuture` — the `addListener` callback where you bind the camera can fire AFTER the ~5-10s `startForegroundService` deadline if something else blocks the main thread | Call `startForeground()` as the FIRST thing in `onStartCommand` (before the `ProcessCameraProvider` handshake). Do the CameraX setup inside the `addListener` callback. On any exception there, call `stopForeground(STOP_FOREGROUND_REMOVE) + stopSelf()` to unwind cleanly |
+
+### PARTIAL_WAKE_LOCK for service-driven recordings
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Long audio/video recording silently truncates when the user presses the power button or the device auto-locks | `FLAG_KEEP_SCREEN_ON` only prevents auto-sleep while the activity is in the resumed state. Once the screen locks (power press, OS policy), the activity pauses, the flag is lifted, and Android aggressively suspends the app process after ~30s unless something is actively holding the CPU awake. MediaRecorder / CameraX Recorder then falls over mid-write | Acquire a `PowerManager.PARTIAL_WAKE_LOCK` in the recording service. Tag it `"YourApp:RecorderWakeLock"` (visible in `adb shell dumpsys power`). Call `setReferenceCounted(false)`. Always pass a timeout to `acquire(ms)` — Lint complains and Doze gets hostile if you don't. Release on every stop path (success, failure, no-file, `onDestroy`) |
+| System `setShowWhenLocked(true)` does nothing even though it was called | The flag only takes effect if the activity was in the `STARTED` state at the moment the lock happens. Calling it in `onCreate` with the activity backgrounded is a no-op | Tie the toggle to live recording state: observe `RecorderService.isRecording.collect` inside a `repeatOnLifecycle(Lifecycle.State.STARTED)` block and call `setShowWhenLocked` / `setTurnScreenOn` from there. Clear the flags when recording stops so normal lock behaviour resumes |
+| Activity recreates on rotation / touch / font-scale change and tears down a Compose cover screen | By default Android restarts activities on a config change. Even a sensor blip (accidental orientation probe from the OS) can pull the rug out from under a long-running cover | Add `android:configChanges="orientation\|screenSize\|screenLayout\|keyboardHidden\|uiMode\|smallestScreenSize\|navigation\|keyboard\|density\|fontScale"` to the Activity in `AndroidManifest.xml`. Compose handles the remaining size updates automatically; no manual `onConfigurationChanged` wiring needed |
+
+### App pinning / LockTask toast is un-suppressible
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `startLockTask()` triggers a system toast "Screen pinned — touch and hold Back and Overview to unpin" every time | That toast is emitted by the framework itself whenever a non-DeviceOwner / non-system-signed app calls `startLockTask()` on a device where the user has enabled "App pinning" under Settings → Security. There is NO documented API to suppress it from a regular app | Don't call `startLockTask()` for a stealth/cover screen. Use `BackHandler` + `WindowInsetsControllerCompat` immersive-sticky (hide system bars) + `FLAG_KEEP_SCREEN_ON` as the baseline. Accept that bottom-home-swipe may dismiss the cover on Pixel — the recording itself keeps running via the foreground service |
+
+### System photo picker and ACTION_PICK routing
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)` opens Google Photos and demands a cloud sign-in on Pixel | `ACTION_PICK` routes to whatever app registered as the default handler for the image/video MIME type. On Pixel that's Google Photos, which refuses to return URIs until the user authenticates against a Google account — even when all the user's photos are local | If you only need local media, query MediaStore yourself. `contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, ...)` gives you `_ID` + `DISPLAY_NAME` + `SIZE` + `MIME_TYPE` + `DURATION` directly. `ContentUris.withAppendedId(collection, id)` turns a row into a real `content://media/external/...` URI — which is exactly what `MediaStore.createDeleteRequest` needs to actually delete originals. Thumbnails: `ContentResolver.loadThumbnail(uri, Size, null)` on API 29+, deprecated `MediaStore.Images/Video.Thumbnails.getThumbnail` below. Build a Compose `LazyVerticalGrid` around this and you never touch Google Photos |
+
 ### MediaStore deletion + picker URIs
 
 | Symptom | Cause | Fix |
@@ -261,6 +290,18 @@ grep -rh "^import com\.yourapp\." app/src/main/java --include="*.kt" | sort -u \
 - Missing `BootReceiver` class — fixed in `87a5009`
 - Missing `VaultSortOrder` import (enum existed, import was missing) — fixed in `e93d2c2`
 - Wrong GeckoView APIs (`cookieBannerMode`, nullable `telemetryDelegate`) — fixed in `ccdf5d0`
+
+### 2026-04-14 session — Round 3 (commits `a766fd0`..`ba15641`, branch `claude/fix-cloud-signin-video-bugs-cGptT`)
+
+- **Fix M — pinning toast (`a766fd0`):** removed `startLockTask`/`stopLockTask` from FakeLockScreen. System toast was un-suppressible; home-swipe dismiss is the accepted trade-off.
+- **Fix L — lock resilience (`a7f85bc`):** `PARTIAL_WAKE_LOCK` in RecorderService + `setShowWhenLocked` / `setTurnScreenOn` on MainActivity while recording + `android:configChanges` on MainActivity so rotation/touch/font-scale don't recreate.
+- **Fix K — CameraX video (`992c4c7`):** swapped `MediaRecorder.VideoSource.CAMERA` (legacy Camera1, silently broken) for CameraX `Recorder` + `VideoCapture`. `RecorderService` now extends `LifecycleService`. Added `androidx.camera:camera-video:1.3.4` and `androidx.lifecycle:lifecycle-service:2.8.4`.
+- **Fix J — in-app gallery picker (`ba15641`):** new `InAppMediaPickerScreen` + `InAppMediaPickerViewModel` query MediaStore directly and return real `content://media/external/...` URIs — no Google Photos, no cloud sign-in. Nested `navigation("vault_graph")` shares `VaultViewModel` between Vault and picker.
+
+Session notes that paid off:
+- **Round-3 ordering:** landed smallest isolated fix first (pinning toast deletion), then manifest + WakeLock, then CameraX, then the gallery picker. Each commit pushed on its own so GitHub Actions could bisect any regression.
+- **Nested navigation graph for shared VM:** `navigation("vault_graph") { composable(Vault.route); composable(MediaPicker.route) }` + `hiltViewModel(parentEntry)` is the cleanest way to share a Hilt VM between a parent screen and a child flow without passing callbacks through Activity/Application scope.
+- **CameraX Recorder.stop() is async:** drive the vault persist off `VideoRecordEvent.Finalize`, NOT off the `stopRecording()` call site. Finalize carries `hasError()` + `error` + `cause` — use them.
 
 ### 2026-04-14 session — 7 runtime bugs closed (commits `4206bee`..`f833ba7`)
 

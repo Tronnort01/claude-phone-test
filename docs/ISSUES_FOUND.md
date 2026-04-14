@@ -21,6 +21,10 @@ All seven issues below are **FIXED**. Commits on `master`:
 | 3c | `1f3a351` | Real gallery deletion via MediaStore PendingIntent |
 | 4 | `583ca17` | Recordings encrypt → vault on stop; plaintext deleted |
 | 5 | `f833ba7` | Fake lock screen disables Back + keeps screen on |
+| J | `ba15641` | In-app MediaStore picker (no Google Photos cloud sign-in) |
+| K | `992c4c7` | Video recording via CameraX VideoCapture (LifecycleService) |
+| L | `a7f85bc` | WAKE_LOCK + setShowWhenLocked + configChanges for recording resilience |
+| M | `a766fd0` | Drop startLockTask/stopLockTask to kill "Screen pinned" toast |
 
 Each fix is its own commit, pushable and bisectable by GitHub Actions. See `docs/FIX_PLAN.md` for what shipped per fix + any deviations from the original plan.
 
@@ -37,6 +41,26 @@ User installed the initial 7-fix APK (`f833ba7`) on a Pixel 6 / Android 16 (API 
 | C | "the videos and photos should be a scrollable view so I don't keep having to hit back to see next photo or video" | `1787bbf` | Viewer took a single `fileId` and rendered one file. Rewritten around `HorizontalPager` with on-demand decryption + per-fileId cache trim. |
 | D | "if I swipe up on my pixel the fake screen can be discard like any other app" | `a16f3e8` | System bars still visible on the fake lock; Android home-swipe not blockable by normal apps. Added immersive-sticky + best-effort `startLockTask()` (requires the user to enable App Pinning in Settings → Security). |
 | E | "the import photos and videos is still leaving a copy in the library" | `a10f5dd` | Photo-picker URIs returned by `GetMultipleContents` aren't MediaStore URIs, so `createDeleteRequest` was a silent no-op. **First attempt** added `resolveToMediaStoreUri` lookup by `(DISPLAY_NAME, SIZE)` + manifest `READ_MEDIA_*` perms. See Round 2 Fix G — this still didn't fully work because the photo picker deliberately strips that mapping. |
+
+---
+
+## Post-testing iterations — Round 3 (2026-04-14)
+
+User installed the Round 2 APK on Pixel 6 / Android 16 (API 36, targetSdk 35) and reported four new issues. All fixed on branch `claude/fix-cloud-signin-video-bugs-cGptT`:
+
+| # | User report | Commit | Root cause |
+|---|---|---|---|
+| J | "when I import photos and videos. it asks asks me to sign in to cloud Google account. I shouldn't have to. I don't have cloud photos. all my photos are local." | `ba15641` | `Intent.ACTION_PICK` hands off to whatever app registered for the image/video MIME type. On Pixel that's Google Photos, which refuses to return URIs until the user signs in. Fixed by bypassing the system picker entirely — new in-app `InAppMediaPickerScreen` + `InAppMediaPickerViewModel` that queries `MediaStore.Images/Video.EXTERNAL_CONTENT_URI` directly via `ContentResolver`, shows thumbnails via `ContentResolver.loadThumbnail` (API 29+), and returns real MediaStore URIs so `createDeleteRequest` still works. Nested `navigation("vault_graph")` shares a `VaultViewModel` between `VaultScreen` and the picker. |
+| K | "when I start video recording. it still very buggy. I don't see my recording getting saved anywhere." | `992c4c7` | Video path used `MediaRecorder.VideoSource.CAMERA`, which is the legacy Camera1 pipeline and requires an explicit `Camera.open()` + `setCamera()` — we never held a Camera instance, so `MediaRecorder.start()` threw RuntimeException, the service caught it, the empty MP4 was cleaned up, and nothing reached the vault chain. Fixed by switching video to CameraX `Recorder` + `VideoCapture` bound to the service's lifecycle (`RecorderService` now extends `LifecycleService`). `VideoRecordEvent.Finalize` drives the vault persist. Added `androidx.camera:camera-video:1.3.4` + `androidx.lifecycle:lifecycle-service:2.8.4`. |
+| L | "my phone keeps actually locking, how do I stop that, I think it's interrupting my recording... when I rotate my screen or touch my phone the app seems to get real phone locked. when I unlock my phone my recording is gone or stopped." | `a7f85bc` | Three-part fix. (1) `MainActivity` gained `android:configChanges` covering orientation/screenSize/screenLayout/keyboardHidden/uiMode/smallestScreenSize/navigation/keyboard/density/fontScale so config changes don't recreate the activity and tear down FakeLockScreen. (2) `MainActivity` observes `RecorderService.isRecording` and toggles `setShowWhenLocked(true)` + `setTurnScreenOn(true)` while recording — if the device does lock, waking returns to the fake lock cover instead of the Pixel keyguard. (3) `RecorderService` holds a `PARTIAL_WAKE_LOCK` "StealthCalc:RecorderWakeLock" acquired in `promoteToForeground()` and released on every stop path — keeps the CPU + MediaRecorder/CameraX Recorder alive even when the screen is off. Added `WAKE_LOCK` permission. |
+| M | "the fake lock screen shouldnt have notifications about pin app" | `a766fd0` | Android shows an unsuppressible system toast ("Screen pinned — touch and hold Back and Overview to unpin") every time `Activity.startLockTask()` is called on a device where the user has enabled App Pinning in Settings → Security. Regular apps can't suppress it. Fixed by removing the `runCatching { startLockTask() }` / `stopLockTask()` calls from `FakeSignInScreen.kt`. `FLAG_KEEP_SCREEN_ON` + `BackHandler` + immersive-sticky remain. Trade-off: home-gesture swipe can now dismiss the fake lock on some devices. The user explicitly accepted this. |
+
+Round 3 known limitations:
+
+- **Battery optimization "Restricted":** if the user has the Calculator set to `Battery → Restricted`, the foreground service can still be killed. Doze exemption is out of scope (would require a user-visible `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` prompt).
+- **Background lock UX:** `setShowWhenLocked(true)` only works if the activity was foregrounded when the lock happened. If the user backgrounded the calculator before locking, they'll see the real Pixel keyguard first and have to unlock normally to return to our fake cover — this is intentional so the stealth cover doesn't pop up unexpectedly when unlocking the device after unrelated use.
+- **Partial photo grant (API 34+ "Selected photos only"):** the in-app picker uses the permission at a grant-binary level. If the user chose "Selected photos only", MediaStore returns the filtered subset. Reasonable first-cut behaviour — full `READ_MEDIA_VISUAL_USER_SELECTED` + re-picker flow is a future enhancement.
+- **Home-gesture dismiss:** without `startLockTask()`, the Pixel bottom home-swipe can drop out of the fake lock. Recording keeps going (the foreground service + wake lock are independent of the activity), but the cover is momentarily lost. User accepted this to kill the pin-app toast.
 
 ---
 
