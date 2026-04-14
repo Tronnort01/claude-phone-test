@@ -3,6 +3,7 @@ package com.stealthcalc.vault.data
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.model.VaultFolder
+import com.stealthcalc.vault.model.VaultSortOrder
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
