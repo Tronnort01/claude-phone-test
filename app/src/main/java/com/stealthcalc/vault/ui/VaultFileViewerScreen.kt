@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.widget.MediaController
 import android.widget.VideoView
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
@@ -40,6 +43,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,24 +60,27 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.viewmodel.VaultFileViewerViewModel
-import com.stealthcalc.vault.viewmodel.ViewerState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun VaultFileViewerScreen(
     onBack: () -> Unit,
     viewModel: VaultFileViewerViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val files by viewModel.files.collectAsStateWithLifecycle()
+    val initialIndex by viewModel.initialIndex.collectAsStateWithLifecycle()
+    val loadError by viewModel.loadError.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    val name = (state as? ViewerState.Loaded)?.file?.fileName ?: "Viewing"
-                    Text(name, maxLines = 1)
+                    // Filled in below once we have the pager — leave blank
+                    // in the top-level scaffold so the back arrow still
+                    // renders while files are still loading.
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -96,26 +103,78 @@ fun VaultFileViewerScreen(
                 .background(Color.Black),
             contentAlignment = Alignment.Center,
         ) {
-            when (val s = state) {
-                ViewerState.Loading -> {
-                    CircularProgressIndicator(color = Color.White)
-                }
-                is ViewerState.Error -> {
+            when {
+                loadError != null -> {
                     Text(
-                        s.message,
+                        loadError ?: "Error",
                         color = Color.White,
                         modifier = Modifier.padding(32.dp),
                     )
                 }
-                is ViewerState.Loaded -> {
-                    when (s.file.fileType) {
-                        VaultFileType.PHOTO -> PhotoView(s.tempFile)
-                        VaultFileType.VIDEO -> VideoPlayer(s.tempFile)
-                        VaultFileType.AUDIO -> AudioPlayer(s.file, s.tempFile)
-                        VaultFileType.DOCUMENT, VaultFileType.OTHER -> ExternalOpenView(s.file, s.tempFile)
-                    }
+                files.isEmpty() -> {
+                    CircularProgressIndicator(color = Color.White)
+                }
+                else -> {
+                    ViewerPager(files = files, initialIndex = initialIndex, viewModel = viewModel)
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ViewerPager(
+    files: List<VaultFile>,
+    initialIndex: Int,
+    viewModel: VaultFileViewerViewModel,
+) {
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, (files.size - 1).coerceAtLeast(0)),
+        pageCount = { files.size },
+    )
+
+    // Trim the decrypted-temp cache as the user pages so cacheDir doesn't
+    // fill up on very long vault lists. Keep the current page + 2 on each
+    // side hot; everything else is deleted from disk and cache.
+    LaunchedEffect(pagerState, files) {
+        snapshotFlow { pagerState.currentPage }.collectLatest { page ->
+            viewModel.trimCache(page, keepAround = 2)
+        }
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+    ) { page ->
+        val file = files[page]
+        VaultFilePage(file = file, viewModel = viewModel)
+    }
+}
+
+@Composable
+private fun VaultFilePage(
+    file: VaultFile,
+    viewModel: VaultFileViewerViewModel,
+) {
+    var tempFile by remember(file.id) { mutableStateOf<File?>(null) }
+    var error by remember(file.id) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(file.id) {
+        val result = viewModel.decrypt(file)
+        if (result != null) tempFile = result
+        else error = "Failed to decrypt"
+    }
+
+    val temp = tempFile
+    when {
+        error != null -> Text(error ?: "", color = Color.White)
+        temp == null -> CircularProgressIndicator(color = Color.White)
+        else -> when (file.fileType) {
+            VaultFileType.PHOTO -> PhotoView(temp)
+            VaultFileType.VIDEO -> VideoPlayer(temp)
+            VaultFileType.AUDIO -> AudioPlayer(file, temp)
+            VaultFileType.DOCUMENT, VaultFileType.OTHER -> ExternalOpenView(file, temp)
         }
     }
 }
@@ -159,7 +218,6 @@ private fun VideoPlayer(tempFile: File) {
 
 @Composable
 private fun AudioPlayer(file: VaultFile, tempFile: File) {
-    val context = LocalContext.current
     val player = remember(tempFile.absolutePath) {
         MediaPlayer().apply {
             setDataSource(tempFile.absolutePath)
