@@ -11,6 +11,7 @@ import com.stealthcalc.recorder.model.RecordingType
 import com.stealthcalc.recorder.service.RecorderService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -82,6 +83,18 @@ class RecorderViewModel @Inject constructor(
         }
         appContext.startForegroundService(intent)
         _state.value = _state.value.copy(showCoverScreen = true)
+
+        // Safety net: if the service fails to enter the recording state
+        // within a few seconds (e.g. a SecurityException on the
+        // foreground-service promotion that we log but silently recover
+        // from), dismiss the cover so the user isn't stuck staring at
+        // the fake lock with no way to tell that nothing was captured.
+        viewModelScope.launch {
+            delay(4_000)
+            if (!RecorderService.isRecording.value && _state.value.showCoverScreen) {
+                _state.value = _state.value.copy(showCoverScreen = false)
+            }
+        }
     }
 
     fun stopRecording() {
