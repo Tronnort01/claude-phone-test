@@ -489,9 +489,10 @@ private fun VaultFileCard(
                     }
                 }
 
-                if (thumbBitmap != null) {
+                val loadedThumb = thumbBitmap
+                if (loadedThumb != null) {
                     Image(
-                        bitmap = thumbBitmap.asImageBitmap(),
+                        bitmap = loadedThumb.asImageBitmap(),
                         contentDescription = file.fileName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
