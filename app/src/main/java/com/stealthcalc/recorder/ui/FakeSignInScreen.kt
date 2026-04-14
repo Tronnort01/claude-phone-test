@@ -1,5 +1,8 @@
 package com.stealthcalc.recorder.ui
 
+import android.app.Activity
+import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -23,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -62,6 +67,26 @@ fun FakeLockScreen(
     secretPin: String,
     onUnlock: () -> Unit
 ) {
+    // Swallow the system Back press — the only way out of the fake lock
+    // screen is to enter the correct PIN. Without this, pressing Back
+    // would dismiss the composable and expose the real recorder UI,
+    // defeating the cover.
+    BackHandler(enabled = true) { /* intentionally no-op */ }
+
+    // Keep the device screen on while the fake lock is shown so the
+    // display doesn't auto-sleep and interrupt the underlying recording.
+    // We add FLAG_KEEP_SCREEN_ON to the hosting Activity's window and
+    // clear it when this composable leaves the tree so every other screen
+    // returns to normal screen-timeout behavior.
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        val window = (context as? Activity)?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     var enteredPin by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
     var currentTime by remember { mutableStateOf(formatTime()) }
