@@ -112,6 +112,12 @@ Bridge from ViewModel to Compose launcher: expose `StateFlow<IntentSender?>` fro
 |---|---|---|
 | `fun importFiles(deleteOriginals: Boolean) { ... deleteOriginals(uris) ... }` — the inner call resolves to the Boolean param, not the private method | Kotlin's function/property namespace is shared within a scope. A Boolean parameter shadows a same-named function and makes `name(args)` fail because Boolean isn't invokable | Rename the function (`requestOriginalsDeletion`) or the parameter to make the call site unambiguous |
 
+### Kotlin delegated properties + smart cast
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Smart cast to 'Bitmap' is impossible, because 'thumbBitmap' is a delegated property` | `val x by produceState<T?>(...)` and `var y by remember { mutableStateOf<T?>(null) }` are delegated properties (read via `getValue()`). Kotlin can't prove the getter is stable between a null-check and a later read, so `if (x != null) { x.foo() }` won't smart-cast | Capture into a plain local val: `val captured = x; if (captured != null) captured.foo()`. Or use safe-call + let: `x?.let { it.foo() }` |
+
 ### Build / Workflow
 
 | Error | Cause | Fix |
