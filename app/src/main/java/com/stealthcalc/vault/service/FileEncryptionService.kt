@@ -185,6 +185,63 @@ class FileEncryptionService @Inject constructor(
     }
 
     /**
+     * Encrypt a file that already lives on local disk (e.g. a just-finished
+     * recording in filesDir/recordings) into the vault. Mirrors [importFile]
+     * but takes a File instead of a content URI, and always reads via
+     * FileInputStream so no ContentResolver grant is needed.
+     *
+     * Generates a video frame thumbnail for VIDEO files; audio has no thumb.
+     * Extracts duration / width / height via MediaMetadataRetriever.
+     * Returns the VaultFile metadata — caller is responsible for persisting
+     * it to the vault DB and deleting the plaintext source afterward.
+     */
+    fun encryptLocalFile(
+        source: File,
+        originalName: String,
+        fileType: VaultFileType,
+        mimeType: String,
+    ): VaultFile {
+        val fileId = UUID.randomUUID().toString()
+        val encFile = File(vaultDir, "$fileId.enc")
+        val fileSize = encryptStream(FileInputStream(source), encFile)
+
+        var thumbPath: String? = null
+        var durationMs: Long? = null
+        var width: Int? = null
+        var height: Int? = null
+
+        if (fileType == VaultFileType.VIDEO || fileType == VaultFileType.AUDIO) {
+            try {
+                val retriever = MediaMetadataRetriever()
+                retriever.setDataSource(source.absolutePath)
+                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                if (fileType == VaultFileType.VIDEO) {
+                    width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+                    height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+                    retriever.getFrameAtTime(1_000_000)?.let { frame ->
+                        thumbPath = saveThumbnail(frame, fileId)
+                    }
+                }
+                retriever.release()
+            } catch (_: Exception) { }
+        }
+
+        return VaultFile(
+            id = fileId,
+            fileName = originalName,
+            originalName = originalName,
+            encryptedPath = encFile.absolutePath,
+            thumbnailPath = thumbPath,
+            fileType = fileType,
+            mimeType = mimeType,
+            fileSizeBytes = fileSize,
+            width = width,
+            height = height,
+            durationMs = durationMs,
+        )
+    }
+
+    /**
      * Encrypt a photo taken directly by the secure camera.
      */
     fun encryptBitmap(bitmap: Bitmap, fileName: String): VaultFile {

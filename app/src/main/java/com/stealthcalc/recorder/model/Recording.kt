@@ -15,7 +15,12 @@ data class Recording(
     val format: String = "m4a",
     val thumbnailPath: String? = null,
     val cameraFacing: CameraFacing? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    // Set when the recording has been encrypted and saved to the vault.
+    // Points at VaultFile.id so the recordings list can navigate to the
+    // viewer without having to resolve the plaintext path (which no longer
+    // exists once the vault copy is saved).
+    val vaultFileId: String? = null,
 )
 
 enum class RecordingType { AUDIO, VIDEO }

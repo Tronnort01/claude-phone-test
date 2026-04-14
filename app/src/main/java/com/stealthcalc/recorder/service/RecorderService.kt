@@ -16,9 +16,13 @@ import android.util.Size
 import android.view.Surface
 import androidx.core.app.NotificationCompat
 import com.stealthcalc.MainActivity
+import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.recorder.model.CameraFacing
 import com.stealthcalc.recorder.model.Recording
 import com.stealthcalc.recorder.model.RecordingType
+import com.stealthcalc.vault.data.VaultRepository
+import com.stealthcalc.vault.model.VaultFileType
+import com.stealthcalc.vault.service.FileEncryptionService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,11 +33,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class RecorderService : Service() {
@@ -67,6 +73,9 @@ class RecorderService : Service() {
 
         fun clearLastCompleted() { _lastCompletedRecording.value = null }
     }
+
+    @Inject lateinit var encryptionService: FileEncryptionService
+    @Inject lateinit var vaultRepository: VaultRepository
 
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: File? = null
@@ -179,6 +188,8 @@ class RecorderService : Service() {
         val file = outputFile
         val id = recordingId
         val type = currentType
+        val facing = currentFacing
+        val startTime = startTimeMs
 
         try {
             mediaRecorder?.stop()
@@ -191,26 +202,82 @@ class RecorderService : Service() {
         _currentRecordingId.value = null
         _elapsedMs.value = 0
 
-        // Report completed recording
         if (file != null && file.exists() && id != null) {
-            val timestamp = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault()).format(Date(startTimeMs))
-            val typeLabel = if (type == RecordingType.VIDEO) "Video" else "Recording"
-            _lastCompletedRecording.value = RecordingResult(
-                recording = Recording(
-                    id = id,
-                    title = "$typeLabel $timestamp",
-                    encryptedFilePath = file.absolutePath,
-                    type = type,
-                    durationMs = duration,
-                    fileSizeBytes = file.length(),
-                    format = if (type == RecordingType.VIDEO) "mp4" else "m4a",
-                    cameraFacing = if (type == RecordingType.VIDEO) currentFacing else null,
-                )
+            // Stay foreground until encryption finishes so the OS doesn't
+            // reap us mid-write. The chain below:
+            //   1. encrypts the just-finished MP4/M4A into the vault,
+            //   2. saves the VaultFile row,
+            //   3. posts the Recording (with vaultFileId) for the UI,
+            //   4. deletes the plaintext source,
+            //   5. THEN stops the foreground service.
+            // On any failure, we fall back to the pre-fix behavior (report the
+            // plaintext recording so the user doesn't lose data) and log via
+            // AppLogger so the error is exportable from Settings.
+            serviceScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    persistRecordingToVault(file, id, type, facing, startTime, duration)
+                }
+                _lastCompletedRecording.value = RecordingResult(recording = result)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        } else {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
+    private suspend fun persistRecordingToVault(
+        source: File,
+        id: String,
+        type: RecordingType,
+        facing: CameraFacing,
+        startTime: Long,
+        duration: Long,
+    ): Recording {
+        val timestamp = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault()).format(Date(startTime))
+        val typeLabel = if (type == RecordingType.VIDEO) "Video" else "Recording"
+        val title = "$typeLabel $timestamp"
+        val ext = if (type == RecordingType.VIDEO) "mp4" else "m4a"
+        val mimeType = if (type == RecordingType.VIDEO) "video/mp4" else "audio/mp4"
+        val vaultType = if (type == RecordingType.VIDEO) VaultFileType.VIDEO else VaultFileType.AUDIO
+        val plaintextSize = source.length()
+
+        return try {
+            val vaultFile = encryptionService.encryptLocalFile(
+                source = source,
+                originalName = "$title.$ext",
+                fileType = vaultType,
+                mimeType = mimeType,
+            )
+            vaultRepository.saveFile(vaultFile)
+            runCatching { source.delete() }
+            Recording(
+                id = id,
+                title = title,
+                encryptedFilePath = vaultFile.encryptedPath,
+                type = type,
+                durationMs = duration,
+                fileSizeBytes = vaultFile.fileSizeBytes,
+                format = ext,
+                thumbnailPath = vaultFile.thumbnailPath,
+                cameraFacing = if (type == RecordingType.VIDEO) facing else null,
+                vaultFileId = vaultFile.id,
+            )
+        } catch (e: Exception) {
+            AppLogger.log(applicationContext, "recorder", "vault save failed: ${e.message}")
+            Recording(
+                id = id,
+                title = title,
+                encryptedFilePath = source.absolutePath,
+                type = type,
+                durationMs = duration,
+                fileSizeBytes = plaintextSize,
+                format = ext,
+                cameraFacing = if (type == RecordingType.VIDEO) facing else null,
+                vaultFileId = null,
             )
         }
-
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     private fun cleanupRecorder() {
