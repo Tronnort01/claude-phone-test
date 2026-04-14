@@ -1,5 +1,6 @@
 package com.stealthcalc
 
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -16,6 +17,7 @@ import com.stealthcalc.auth.BiometricHelper
 import com.stealthcalc.auth.PanicHandler
 import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.core.util.SecureClipboard
+import com.stealthcalc.recorder.service.RecorderService
 import com.stealthcalc.stealth.navigation.AppRoot
 import com.stealthcalc.ui.theme.StealthCalcTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -55,6 +57,21 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // While a recording is in flight we want this activity to show ON
+        // TOP of the OS keyguard and to TURN THE SCREEN ON if it's off.
+        // Combined with the PARTIAL_WAKE_LOCK held in RecorderService,
+        // this means a power-button press / AOD / auto-lock during
+        // recording wakes back into our fake lock cover instead of the
+        // Pixel keyguard, and the recording keeps running. Flags are
+        // cleared when recording stops so normal lock behaviour resumes.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                RecorderService.isRecording.collect { recording ->
+                    updateShowWhenLocked(recording)
+                }
+            }
+        }
+
         setContent {
             StealthCalcTheme {
                 AppRoot(
@@ -86,6 +103,26 @@ class MainActivity : ComponentActivity() {
             )
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    private fun updateShowWhenLocked(isRecording: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(isRecording)
+            setTurnScreenOn(isRecording)
+        } else {
+            @Suppress("DEPRECATION")
+            if (isRecording) {
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            } else {
+                window.clearFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            }
         }
     }
 }

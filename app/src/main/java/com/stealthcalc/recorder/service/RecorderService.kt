@@ -13,6 +13,7 @@ import android.hardware.camera2.CameraManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Size
 import android.view.Surface
 import androidx.core.app.NotificationCompat
@@ -87,6 +88,7 @@ class RecorderService : Service() {
     private var currentType: RecordingType = RecordingType.AUDIO
     private var currentFacing: CameraFacing = CameraFacing.BACK
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -152,6 +154,7 @@ class RecorderService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            acquireWakeLock()
             true
         } catch (e: Exception) {
             AppLogger.log(
@@ -161,6 +164,33 @@ class RecorderService : Service() {
             )
             stopSelf()
             false
+        }
+    }
+
+    /**
+     * Hold a PARTIAL_WAKE_LOCK so the CPU + MediaRecorder pipeline keeps
+     * running even when the device screen is off. Without this, an
+     * accidental power-button press (or AOD / auto-lock) lets Android
+     * aggressively suspend the app shortly after screen-off and the
+     * recording falls over mid-write. Tag is visible in
+     * `adb shell dumpsys power`. Timeout is a hard cap — the max
+     * recording duration plus a minute of slack for the encrypt/save
+     * chain — to satisfy Lint and Doze expectations.
+     */
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wl = wakeLock ?: pm.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "StealthCalc:RecorderWakeLock"
+        ).apply { setReferenceCounted(false) }
+        wakeLock = wl
+        runCatching { wl.acquire(maxDurationMs + 60_000L) }
+    }
+
+    private fun releaseWakeLock() {
+        runCatching {
+            wakeLock?.takeIf { it.isHeld }?.release()
         }
     }
 
@@ -242,6 +272,7 @@ class RecorderService : Service() {
             )
             // Unwind the foreground service we promoted to in onStartCommand
             // so we don't leak a sticky notification.
+            releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -284,10 +315,12 @@ class RecorderService : Service() {
                     persistRecordingToVault(file, id, type, facing, startTime, duration)
                 }
                 _lastCompletedRecording.value = RecordingResult(recording = result)
+                releaseWakeLock()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         } else {
+            releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -389,6 +422,7 @@ class RecorderService : Service() {
 
     override fun onDestroy() {
         stopRecording()
+        releaseWakeLock()
         super.onDestroy()
     }
 }
