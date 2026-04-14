@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ 'claude/stealth-app-planning-RvjrV', 'claude/stealth-app-merged', 'master' ]
+    branches: [ 'master', 'claude/**' ]
   workflow_dispatch:
 
 jobs:
