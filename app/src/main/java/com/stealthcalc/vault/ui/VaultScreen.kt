@@ -2,6 +2,7 @@ package com.stealthcalc.vault.ui
 
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -60,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -116,6 +118,22 @@ fun VaultScreen(
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.importFiles(uris, deleteOriginals = true)
+        }
+    }
+
+    // Launcher for the MediaStore delete-confirmation dialog. When the VM
+    // publishes an IntentSender (API 29 RecoverableSecurityException or API
+    // 30+ createDeleteRequest), this launches the system dialog; on return,
+    // we clear the pending request so it doesn't fire again on recomposition.
+    val pendingDeleteRequest by viewModel.pendingDeleteRequest.collectAsStateWithLifecycle()
+    val deleteConfirmLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) {
+        viewModel.onDeleteRequestHandled()
+    }
+    LaunchedEffect(pendingDeleteRequest) {
+        pendingDeleteRequest?.let { sender ->
+            deleteConfirmLauncher.launch(IntentSenderRequest.Builder(sender).build())
         }
     }
 

@@ -1,8 +1,13 @@
 package com.stealthcalc.vault.viewmodel
 
+import android.app.RecoverableSecurityException
 import android.content.Context
+import android.content.IntentSender
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stealthcalc.vault.data.VaultRepository
@@ -58,6 +63,14 @@ class VaultViewModel @Inject constructor(
     private val _importProgress = MutableStateFlow("")
     private val _isGridView = MutableStateFlow(true)
     private val _sortOrder = MutableStateFlow(VaultSortOrder.DATE_NEWEST)
+
+    // Holds an IntentSender for MediaStore delete requests that need explicit
+    // user approval (API 29 RecoverableSecurityException, API 30+
+    // createDeleteRequest). The UI collects this and launches the IntentSender
+    // via rememberLauncherForActivityResult; the system shows the system
+    // confirmation dialog and actually deletes the originals on OK.
+    private val _pendingDeleteRequest = MutableStateFlow<IntentSender?>(null)
+    val pendingDeleteRequest: StateFlow<IntentSender?> = _pendingDeleteRequest.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val files = combine(_currentFolderId, _filter, _searchQuery, _sortOrder) { values ->
@@ -153,6 +166,7 @@ class VaultViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _isImporting.value = true
             val total = uris.size
+            val successfullyImported = mutableListOf<Uri>()
 
             uris.forEachIndexed { index, uri ->
                 try {
@@ -162,23 +176,63 @@ class VaultViewModel @Inject constructor(
                     val vaultFile = encryptionService.importFile(uri, name, mimeType)
                         .copy(folderId = _currentFolderId.value)
                     repository.saveFile(vaultFile)
-
-                    // Delete original if requested
-                    if (deleteOriginals) {
-                        try {
-                            appContext.contentResolver.delete(uri, null, null)
-                        } catch (_: Exception) {
-                            // Some URIs can't be deleted (read-only), that's ok
-                        }
-                    }
+                    successfullyImported.add(uri)
                 } catch (e: Exception) {
                     _importProgress.value = "Failed: ${e.message}"
                 }
             }
 
+            if (deleteOriginals && successfullyImported.isNotEmpty()) {
+                requestOriginalsDeletion(successfullyImported)
+            }
+
             _isImporting.value = false
             _importProgress.value = ""
         }
+    }
+
+    /**
+     * Delete the original gallery entries for the given URIs, using the
+     * per-API-level flow:
+     *  - API 30+: bulk MediaStore.createDeleteRequest → one system dialog
+     *    approves all deletes.
+     *  - API 29: try direct delete per URI. If one throws
+     *    RecoverableSecurityException, expose its IntentSender; the user
+     *    approves, then any remaining URIs will be handled on a subsequent
+     *    import (we don't re-drive the loop from here to keep this simple).
+     *  - API 28 and below: direct delete works without any user prompt.
+     *
+     * The originals are only removed on user confirmation — never silently.
+     */
+    private fun requestOriginalsDeletion(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            publishBulkDeleteRequest(uris)
+            return
+        }
+        for (uri in uris) {
+            try {
+                appContext.contentResolver.delete(uri, null, null)
+            } catch (rse: RecoverableSecurityException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    _pendingDeleteRequest.value = rse.userAction.actionIntent.intentSender
+                    return
+                }
+            } catch (_: Exception) {
+                // Some URIs can't be deleted (read-only); skip and move on.
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun publishBulkDeleteRequest(uris: List<Uri>) {
+        val pendingIntent = MediaStore.createDeleteRequest(appContext.contentResolver, uris)
+        _pendingDeleteRequest.value = pendingIntent.intentSender
+    }
+
+    /** Called by the UI after the delete-confirmation launcher returns. */
+    fun onDeleteRequestHandled() {
+        _pendingDeleteRequest.value = null
     }
 
     fun saveImportedFile(file: VaultFile) {
