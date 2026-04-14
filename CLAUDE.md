@@ -29,16 +29,19 @@ A personal stealth productivity Android app disguised as a calculator. Enter a s
 - Secret PIN threaded from calculator unlock → stored in memory → passed to recorder's fake lock screen
 - `FLAG_SECURE` on all stealth screens (no screenshots)
 - `EncryptedSharedPreferences` for settings, SQLCipher for database, AES-256-GCM for vault files
-- GeckoView artifact is architecture-specific: `geckoview-arm64-v8a`
+- GeckoView artifact is architecture-specific: `geckoview-omni-arm64-v8a` (the non-omni `geckoview-arm64-v8a` was discontinued after v117)
 
-## Branch
-- Development branch: `claude/stealth-app-planning-RvjrV`
+## Branches
+- `master` — main branch, triggers APK build
+- `claude/stealth-app-planning-RvjrV` — original development branch, triggers APK build
+- `claude/stealth-app-merged` — backup copy of stealth app, triggers APK build
 - GitHub Actions builds APK on every push (`.github/workflows/build-apk.yml`)
 
 ## Current Build Status
-- Last push: commit `2ba7c87` — fixed GeckoView artifact name to `geckoview-arm64-v8a`
-- Previous build failed because `geckoview` (without arch suffix) doesn't exist on Mozilla Maven
+- Fixed GeckoView dependency: version `123.0.20240213221259` (previous `...20240212205514` didn't exist)
+- Fixed artifact name: `geckoview-omni-arm64-v8a` (previous `geckoview-arm64-v8a` was discontinued after v117)
 - Build-log artifact is uploaded on failure for debugging
+- APK artifact name: `StealthCalc-debug`
 - If build fails again: download `build-log` artifact from Actions, paste errors to fix
 
 ## File Structure
@@ -62,7 +65,8 @@ app/src/main/java/com/stealthcalc/
 ## Important Notes
 - The `settings.gradle.kts` uses `dependencyResolutionManagement` (not `dependencyResolution`)
 - Mozilla Maven repo: `https://maven.mozilla.org/maven2`
-- GeckoView requires arch suffix: `geckoview-arm64-v8a`, NOT plain `geckoview`
+- GeckoView requires the omni arch suffix for v118+: `geckoview-omni-arm64-v8a`, NOT plain `geckoview` and NOT the non-omni `geckoview-arm64-v8a`
+- GeckoView version format is `MAJOR.MINOR.BUILDTIMESTAMP` — the timestamp must match an actual published build on `maven.mozilla.org`
 - `combine()` with >5 flows needs the vararg Array form
 - Room DB version is currently 5
 - Don't use `StorageController.ClearFlags.ALL` for GeckoView — use individual flags ORed together
