@@ -1,9 +1,14 @@
 package com.stealthcalc.vault.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -74,6 +79,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -112,12 +118,61 @@ fun VaultScreen(
         }
     }
 
-    // Media picker (photos/videos)
+    // Media picker (photos/videos). The picker itself returns ephemeral
+    // content://media/picker URIs that can't be deleted directly; the
+    // VM maps them to real MediaStore URIs before requesting deletion.
+    // That MediaStore lookup requires READ_MEDIA_IMAGES / READ_MEDIA_VIDEO
+    // on API 33+ (READ_EXTERNAL_STORAGE below) — we request them before
+    // opening the picker so deletion actually works after import.
     val mediaPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.importFiles(uris, deleteOriginals = true)
+        }
+    }
+
+    val context = LocalContext.current
+    // Holds the mime filter (image/* or video/*) while we wait for the
+    // permission launcher to return; when the grant comes back, we
+    // remember which picker to open.
+    var pendingMediaMimeFilter by remember { mutableStateOf<String?>(null) }
+    val mediaReadPermissions: Array<String> = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+    val mediaPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val filter = pendingMediaMimeFilter ?: return@rememberLauncherForActivityResult
+        pendingMediaMimeFilter = null
+        val anyGranted = results.values.any { it }
+        if (anyGranted) {
+            mediaPickerLauncher.launch(filter)
+        } else {
+            Toast.makeText(
+                context,
+                "Photos/Videos permission needed to move originals out of the gallery",
+                Toast.LENGTH_LONG
+            ).show()
+            // Still allow the import without permission — files will be
+            // copied into the vault, but the originals can't be deleted.
+            mediaPickerLauncher.launch(filter)
+        }
+    }
+
+    val launchMediaPicker: (String) -> Unit = { mimeFilter ->
+        val missing = mediaReadPermissions.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            mediaPickerLauncher.launch(mimeFilter)
+        } else {
+            pendingMediaMimeFilter = mimeFilter
+            mediaPermissionLauncher.launch(missing.toTypedArray())
         }
     }
 
@@ -328,12 +383,12 @@ fun VaultScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = {
                         showImportOptions = false
-                        mediaPickerLauncher.launch("image/*")
+                        launchMediaPicker("image/*")
                     }) { Text("Import Photos (removes from gallery)") }
 
                     TextButton(onClick = {
                         showImportOptions = false
-                        mediaPickerLauncher.launch("video/*")
+                        launchMediaPicker("video/*")
                     }) { Text("Import Videos (removes from gallery)") }
 
                     TextButton(onClick = {

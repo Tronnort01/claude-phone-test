@@ -12,6 +12,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
 
+    <!-- Used to look up MediaStore URIs that match photo-picker content URIs,
+         so that originals can be deleted after importing into the vault.
+         See VaultViewModel.resolveToMediaStoreUri. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <application
         android:name=".StealthCalcApp"
         android:label="Calculator"

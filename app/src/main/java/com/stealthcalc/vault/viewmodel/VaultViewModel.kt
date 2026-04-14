@@ -1,6 +1,7 @@
 package com.stealthcalc.vault.viewmodel
 
 import android.app.RecoverableSecurityException
+import android.content.ContentUris
 import android.content.Context
 import android.content.IntentSender
 import android.net.Uri
@@ -10,6 +11,7 @@ import android.provider.OpenableColumns
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.vault.data.VaultRepository
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
@@ -202,15 +204,36 @@ class VaultViewModel @Inject constructor(
      *    import (we don't re-drive the loop from here to keep this simple).
      *  - API 28 and below: direct delete works without any user prompt.
      *
+     * On API 33+ the system photo picker returns read-only
+     * content://media/picker URIs that are NOT MediaStore entries, so
+     * createDeleteRequest on them is a silent no-op. To actually delete
+     * the original gallery copy we first map each picker URI to its
+     * MediaStore URI by matching (DISPLAY_NAME, SIZE). That lookup
+     * requires READ_MEDIA_IMAGES / READ_MEDIA_VIDEO permission; if the
+     * user hasn't granted those, the mapping returns nothing and the
+     * failure is logged for the Export-crash-log flow.
+     *
      * The originals are only removed on user confirmation — never silently.
      */
     private fun requestOriginalsDeletion(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            publishBulkDeleteRequest(uris)
+
+        val resolvedUris = uris.mapNotNull { resolveToMediaStoreUri(it) ?: it.takeIf { isMediaStoreUri(it) } }
+        if (resolvedUris.isEmpty()) {
+            AppLogger.log(
+                appContext,
+                "vault",
+                "Import delete skipped: ${uris.size} picker URIs did not resolve to MediaStore entries. " +
+                    "Grant Photos/Videos permission so originals can be removed after import."
+            )
             return
         }
-        for (uri in uris) {
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            publishBulkDeleteRequest(resolvedUris)
+            return
+        }
+        for (uri in resolvedUris) {
             try {
                 appContext.contentResolver.delete(uri, null, null)
             } catch (rse: RecoverableSecurityException) {
@@ -228,6 +251,72 @@ class VaultViewModel @Inject constructor(
     private fun publishBulkDeleteRequest(uris: List<Uri>) {
         val pendingIntent = MediaStore.createDeleteRequest(appContext.contentResolver, uris)
         _pendingDeleteRequest.value = pendingIntent.intentSender
+    }
+
+    /**
+     * Look up the MediaStore URI that corresponds to a picker-returned
+     * content URI. The photo picker (`content://media/picker/...`) returns
+     * ephemeral read-only grants that can't be deleted; MediaStore
+     * (`content://media/external/images/...`) URIs can.
+     *
+     * We match by (DISPLAY_NAME, SIZE) against the Images / Video / Audio
+     * collection. Requires READ_MEDIA_IMAGES/VIDEO (API 33+) or
+     * READ_EXTERNAL_STORAGE (<33) — without it the query returns no rows
+     * and this method returns null.
+     */
+    private fun resolveToMediaStoreUri(pickerUri: Uri): Uri? {
+        if (isMediaStoreUri(pickerUri)) return pickerUri
+        return try {
+            val resolver = appContext.contentResolver
+            val mimeType = resolver.getType(pickerUri) ?: ""
+            val collection = when {
+                mimeType.startsWith("image/") -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                mimeType.startsWith("video/") -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                mimeType.startsWith("audio/") -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                else -> return null
+            }
+
+            // Read display name + size from the picker URI (always permitted).
+            var displayName: String? = null
+            var size: Long = -1L
+            resolver.query(
+                pickerUri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (nameIdx >= 0) displayName = cursor.getString(nameIdx)
+                    if (sizeIdx >= 0) size = cursor.getLong(sizeIdx)
+                }
+            }
+            if (displayName.isNullOrBlank() || size <= 0) return null
+
+            // Find the MediaStore row with the same display name + size.
+            // Needs READ_MEDIA_* / READ_EXTERNAL_STORAGE — if denied, the
+            // query silently returns no rows and we fall through to null.
+            val projection = arrayOf(MediaStore.MediaColumns._ID)
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.SIZE}=?"
+            val args = arrayOf(displayName!!, size.toString())
+            resolver.query(collection, projection, selection, args, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(0)
+                    return ContentUris.withAppendedId(collection, id)
+                }
+            }
+            null
+        } catch (e: Exception) {
+            AppLogger.log(appContext, "vault", "resolveToMediaStoreUri failed: ${e.message}")
+            null
+        }
+    }
+
+    /** True for URIs like content://media/external/images/media/123. */
+    private fun isMediaStoreUri(uri: Uri): Boolean {
+        val path = uri.path ?: return false
+        return uri.authority == MediaStore.AUTHORITY &&
+            (path.startsWith("/external/") || path.startsWith("/internal/"))
     }
 
     /** Called by the UI after the delete-confirmation launcher returns. */
