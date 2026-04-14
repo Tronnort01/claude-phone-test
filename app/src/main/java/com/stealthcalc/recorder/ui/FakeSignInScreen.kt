@@ -80,11 +80,14 @@ fun FakeLockScreen(
     // display doesn't auto-sleep and interrupt the underlying recording.
     // Also hide the status and navigation bars (immersive sticky) so the
     // Pixel home-swipe indicator is gone and there's no visual affordance
-    // to leave the fake lock. True lockdown against the home gesture
-    // requires startLockTask() (screen pinning) — we attempt that too
-    // but it only succeeds if the user has enabled App Pinning under
-    // Settings → Security, so the immersive flags are the always-on
-    // baseline.
+    // to leave the fake lock.
+    //
+    // We intentionally do NOT call Activity.startLockTask() here: on
+    // devices where the user has enabled "App pinning" in Settings →
+    // Security the call triggers a system toast ("Screen pinned — touch
+    // and hold Back and Overview to unpin") every time recording starts.
+    // That toast blows the cover. Immersive sticky + BackHandler are the
+    // full suite now; home-gesture dismiss is accepted as a trade-off.
     val context = LocalContext.current
     DisposableEffect(Unit) {
         val activity = context as? Activity
@@ -97,17 +100,9 @@ fun FakeLockScreen(
             hide(WindowInsetsCompat.Type.systemBars())
         }
 
-        // Best-effort app pinning. Only takes effect on devices where the
-        // user enabled "App pinning" in Settings → Security; otherwise the
-        // call is a no-op. When it DOES take effect, the home gesture,
-        // overview, and power-button long press are all blocked until
-        // stopLockTask() is called on correct-PIN unlock.
-        runCatching { activity?.startLockTask() }
-
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             insetsController?.show(WindowInsetsCompat.Type.systemBars())
-            runCatching { activity?.stopLockTask() }
         }
     }
 
