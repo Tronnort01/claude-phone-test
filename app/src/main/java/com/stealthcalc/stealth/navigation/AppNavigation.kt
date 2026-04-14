@@ -9,9 +9,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.navigation.navigation
 import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.auth.ui.SetupScreen
 import com.stealthcalc.calculator.ui.CalculatorScreen
@@ -24,9 +27,11 @@ import com.stealthcalc.tasks.ui.GoalsScreen
 import com.stealthcalc.settings.ui.SettingsScreen
 import com.stealthcalc.vault.data.VaultRepository
 import com.stealthcalc.vault.service.FileEncryptionService
+import com.stealthcalc.vault.ui.InAppMediaPickerScreen
 import com.stealthcalc.vault.ui.SecureCameraScreen
 import com.stealthcalc.vault.ui.VaultFileViewerScreen
 import com.stealthcalc.vault.ui.VaultScreen
+import com.stealthcalc.vault.viewmodel.PickerTab
 import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
@@ -56,8 +61,13 @@ sealed class AppScreen(val route: String) {
     data object FileViewer : AppScreen("vault_file/{fileId}") {
         fun createRoute(fileId: String) = "vault_file/$fileId"
     }
+    data object MediaPicker : AppScreen("media_picker/{tab}") {
+        fun createRoute(tab: PickerTab) = "media_picker/${tab.name}"
+    }
     data object Settings : AppScreen("settings")
 }
+
+private const val VAULT_GRAPH_ROUTE = "vault_graph"
 
 @Composable
 fun AppRoot(
@@ -247,21 +257,66 @@ fun StealthNavGraph(
             )
         }
 
-        composable(AppScreen.Vault.route) {
-            VaultScreen(
-                onBack = { navController.popBackStack() },
-                onOpenFile = { file ->
-                    navController.navigate(AppScreen.FileViewer.createRoute(file.id))
-                },
-                onOpenCamera = { navController.navigate(AppScreen.SecureCamera.route) }
-            )
+        // Nested graph so VaultScreen and the in-app media picker share
+        // a single VaultViewModel scoped to the graph's back-stack
+        // entry. That lets the picker's onImport callback drive
+        // `vaultVm.importFiles(uris, deleteOriginals = true)` on the
+        // same VM that renders the vault grid.
+        navigation(
+            route = VAULT_GRAPH_ROUTE,
+            startDestination = AppScreen.Vault.route,
+        ) {
+            composable(AppScreen.Vault.route) { entry ->
+                val parentEntry = remember(entry) {
+                    navController.getBackStackEntry(VAULT_GRAPH_ROUTE)
+                }
+                val vaultVm: com.stealthcalc.vault.viewmodel.VaultViewModel =
+                    androidx.hilt.navigation.compose.hiltViewModel(parentEntry)
+                VaultScreen(
+                    viewModel = vaultVm,
+                    onBack = { navController.popBackStack() },
+                    onOpenFile = { file ->
+                        navController.navigate(AppScreen.FileViewer.createRoute(file.id))
+                    },
+                    onOpenCamera = { navController.navigate(AppScreen.SecureCamera.route) },
+                    onPickPhotos = {
+                        navController.navigate(AppScreen.MediaPicker.createRoute(PickerTab.PHOTOS))
+                    },
+                    onPickVideos = {
+                        navController.navigate(AppScreen.MediaPicker.createRoute(PickerTab.VIDEOS))
+                    },
+                )
+            }
+
+            composable(
+                route = AppScreen.MediaPicker.route,
+                arguments = listOf(
+                    navArgument("tab") { type = NavType.StringType }
+                )
+            ) { entry ->
+                val parentEntry = remember(entry) {
+                    navController.getBackStackEntry(VAULT_GRAPH_ROUTE)
+                }
+                val vaultVm: com.stealthcalc.vault.viewmodel.VaultViewModel =
+                    androidx.hilt.navigation.compose.hiltViewModel(parentEntry)
+                val tabName = entry.arguments?.getString("tab") ?: PickerTab.PHOTOS.name
+                val tab = runCatching { PickerTab.valueOf(tabName) }.getOrDefault(PickerTab.PHOTOS)
+                InAppMediaPickerScreen(
+                    initialTab = tab,
+                    onCancel = { navController.popBackStack() },
+                    onImport = { uris ->
+                        vaultVm.importFiles(uris, deleteOriginals = true)
+                        navController.popBackStack()
+                    }
+                )
+            }
         }
 
         composable(
             route = AppScreen.FileViewer.route,
             arguments = listOf(
-                androidx.navigation.navArgument("fileId") {
-                    type = androidx.navigation.NavType.StringType
+                navArgument("fileId") {
+                    type = NavType.StringType
                 }
             )
         ) {

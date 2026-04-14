@@ -1,18 +1,9 @@
 package com.stealthcalc.vault.ui
 
-import android.Manifest
-import android.app.Activity
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -83,7 +74,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -105,6 +95,8 @@ fun VaultScreen(
     onBack: () -> Unit,
     onOpenFile: (VaultFile) -> Unit,
     onOpenCamera: () -> Unit = {},
+    onPickPhotos: () -> Unit = {},
+    onPickVideos: () -> Unit = {},
     viewModel: VaultViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -113,100 +105,15 @@ fun VaultScreen(
     var showImportOptions by remember { mutableStateOf(false) }
     var showSortPicker by remember { mutableStateOf(false) }
 
-    // File picker
+    // Document picker — kept as-is for non-gallery imports. Photos and
+    // videos go through the in-app MediaStore picker (see onPickPhotos /
+    // onPickVideos) to avoid handing off to Google Photos, which on
+    // Pixel devices forces a cloud sign-in before returning any URIs.
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.importFiles(uris, deleteOriginals = false)
-        }
-    }
-
-    // Media picker. Uses Intent.ACTION_PICK with a MediaStore collection URI
-    // as data — this opens the legacy gallery picker UI (stock Gallery /
-    // Photos), which returns REAL MediaStore URIs
-    // (content://media/external/images/media/N). Those URIs work with
-    // MediaStore.createDeleteRequest so the system dialog actually deletes
-    // the originals on approval.
-    //
-    // The previous implementation used GetMultipleContents / the system
-    // photo picker; on Android 13+ that returns ephemeral
-    // content://media/picker URIs that can't be mapped back to MediaStore
-    // (the log showed "3 picker URIs did not resolve to MediaStore entries"
-    // because the photo picker privacy-strips the mapping).
-    val context = LocalContext.current
-    val mediaPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val data = result.data ?: return@rememberLauncherForActivityResult
-        val uris = buildList {
-            val clip = data.clipData
-            if (clip != null) {
-                for (i in 0 until clip.itemCount) {
-                    clip.getItemAt(i)?.uri?.let { add(it) }
-                }
-            } else {
-                data.data?.let { add(it) }
-            }
-        }
-        if (uris.isNotEmpty()) {
-            viewModel.importFiles(uris, deleteOriginals = true)
-        }
-    }
-
-    // Holds the MediaStore collection URI (images / videos) while we wait
-    // for the permission launcher to return; when the grant comes back
-    // we open the picker for that collection.
-    var pendingMediaCollection by remember { mutableStateOf<Uri?>(null) }
-    val mediaReadPermissions: Array<String> = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
-        } else {
-            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-    }
-    val launchPickIntent: (Uri) -> Unit = { collection ->
-        val intent = Intent(Intent.ACTION_PICK, collection).apply {
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-        }
-        try {
-            mediaPickerLauncher.launch(intent)
-        } catch (e: Exception) {
-            Toast.makeText(
-                context,
-                "No gallery app available to pick from",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-    val mediaPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val collection = pendingMediaCollection ?: return@rememberLauncherForActivityResult
-        pendingMediaCollection = null
-        val anyGranted = results.values.any { it }
-        if (!anyGranted) {
-            Toast.makeText(
-                context,
-                "Photos/Videos permission needed to remove originals from gallery",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-        // Open the picker either way — without permission the copy still
-        // works, the delete will just be a no-op.
-        launchPickIntent(collection)
-    }
-
-    val launchMediaPicker: (Uri) -> Unit = { collection ->
-        val missing = mediaReadPermissions.filter {
-            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing.isEmpty()) {
-            launchPickIntent(collection)
-        } else {
-            pendingMediaCollection = collection
-            mediaPermissionLauncher.launch(missing.toTypedArray())
         }
     }
 
@@ -417,12 +324,12 @@ fun VaultScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = {
                         showImportOptions = false
-                        launchMediaPicker(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                        onPickPhotos()
                     }) { Text("Import Photos (removes from gallery)") }
 
                     TextButton(onClick = {
                         showImportOptions = false
-                        launchMediaPicker(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                        onPickVideos()
                     }) { Text("Import Videos (removes from gallery)") }
 
                     TextButton(onClick = {
