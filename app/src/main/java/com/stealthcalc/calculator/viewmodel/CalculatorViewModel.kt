@@ -139,10 +139,17 @@ class CalculatorViewModel @Inject constructor(
                     return SecretCodeResult.DecoyUnlocked(code)
                 }
                 is SecretCodeManager.ValidationResult.NotSetup -> {
-                    // First time — need setup
+                    // Defensive guard: if setup is actually complete but the
+                    // manager still returned NotSetup (e.g. corrupted prefs),
+                    // treat the input as a wrong code instead of re-triggering
+                    // the setup flow — which would otherwise grant access.
                     performCalculation()
                     inputBuffer.clear()
-                    return SecretCodeResult.NeedsSetup(codeCandidate)
+                    return if (secretCodeManager.isSetupComplete) {
+                        SecretCodeResult.None
+                    } else {
+                        SecretCodeResult.NeedsSetup(codeCandidate)
+                    }
                 }
                 is SecretCodeManager.ValidationResult.LockedOut -> {
                     // Just show normal calc result, no hint of lockout

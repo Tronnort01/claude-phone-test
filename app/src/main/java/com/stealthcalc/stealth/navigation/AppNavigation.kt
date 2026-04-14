@@ -60,6 +60,7 @@ fun AppRoot(
     isStealthUnlocked: Boolean,
     onStealthUnlocked: () -> Unit,
     onLockRequested: () -> Unit,
+    secretCodeManager: SecretCodeManager,
 ) {
     var showSetup by remember { mutableStateOf(false) }
     var setupCandidateCode by remember { mutableStateOf("") }
@@ -103,6 +104,9 @@ fun AppRoot(
                 SetupScreen(
                     suggestedCode = setupCandidateCode,
                     onSetupComplete = { code ->
+                        // Persist the chosen code so subsequent unlocks validate
+                        // against it instead of re-triggering setup with any input.
+                        secretCodeManager.setSecretCode(code)
                         activeSecretPin = code
                         showSetup = false
                         onStealthUnlocked()

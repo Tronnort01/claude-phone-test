@@ -14,6 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.stealthcalc.auth.AutoLockManager
 import com.stealthcalc.auth.BiometricHelper
 import com.stealthcalc.auth.PanicHandler
+import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.core.util.SecureClipboard
 import com.stealthcalc.stealth.navigation.AppRoot
 import com.stealthcalc.ui.theme.StealthCalcTheme
@@ -36,6 +37,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var secureClipboard: SecureClipboard
 
+    @Inject
+    lateinit var secretCodeManager: SecretCodeManager
+
     private var isStealthVisible by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +60,8 @@ class MainActivity : ComponentActivity() {
                 AppRoot(
                     isStealthUnlocked = isStealthVisible,
                     onStealthUnlocked = { autoLockManager.unlock() },
-                    onLockRequested = { autoLockManager.lock() }
+                    onLockRequested = { autoLockManager.lock() },
+                    secretCodeManager = secretCodeManager,
                 )
             }
         }
