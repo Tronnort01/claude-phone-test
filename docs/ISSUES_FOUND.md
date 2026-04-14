@@ -26,6 +26,33 @@ Each fix is its own commit, pushable and bisectable by GitHub Actions. See `docs
 
 ---
 
+## Post-testing iterations — Round 1 (2026-04-14)
+
+User installed the initial 7-fix APK (`f833ba7`) on a Pixel 6 / Android 16 (API 36, targetSdk 35) and reported five new issues. All fixed on `master`; see `docs/FIX_PLAN.md` "Post-testing iterations — Round 1" for details.
+
+| # | User report | Commit | Root cause |
+|---|---|---|---|
+| A | "the export log should be a txt file. I already told you before I can view .log files" | `5317a38` | Log named `app.log`; stock Android viewers don't recognize the extension. Renamed to `app.txt`. |
+| B | "the audio and video recording doesnt actual record anything when I click on tap to record button" | `e3b2c55` | Runtime permissions (`RECORD_AUDIO`/`CAMERA`/`POST_NOTIFICATIONS`) declared in manifest but never requested. `MediaRecorder.start()` threw `SecurityException` which the service silently swallowed. |
+| C | "the videos and photos should be a scrollable view so I don't keep having to hit back to see next photo or video" | `1787bbf` | Viewer took a single `fileId` and rendered one file. Rewritten around `HorizontalPager` with on-demand decryption + per-fileId cache trim. |
+| D | "if I swipe up on my pixel the fake screen can be discard like any other app" | `a16f3e8` | System bars still visible on the fake lock; Android home-swipe not blockable by normal apps. Added immersive-sticky + best-effort `startLockTask()` (requires the user to enable App Pinning in Settings → Security). |
+| E | "the import photos and videos is still leaving a copy in the library" | `a10f5dd` | Photo-picker URIs returned by `GetMultipleContents` aren't MediaStore URIs, so `createDeleteRequest` was a silent no-op. **First attempt** added `resolveToMediaStoreUri` lookup by `(DISPLAY_NAME, SIZE)` + manifest `READ_MEDIA_*` perms. See Round 2 Fix G — this still didn't fully work because the photo picker deliberately strips that mapping. |
+
+---
+
+## Post-testing iterations — Round 2 (2026-04-14)
+
+User installed the Round 1 APK (`a10f5dd`) and tested. The exported `app.txt` log showed three service errors + three `[FATAL]` blocks + three `Import delete skipped` lines — all from two unresolved issues. Fixed on `master`; see `docs/FIX_PLAN.md` "Post-testing iterations — Round 2" for details.
+
+| # | User report | Commit | Root cause |
+|---|---|---|---|
+| F | "the recording is still not appearing saved anywhere. when I click on record button it goes to fake lock screen, but then shortly goes to real locked screen and recording is nowhere to be found" | `d9e0d53` | Three interlocking Android-14+ bugs: (1) manifest `foregroundServiceType="microphone\|camera"` causes the default FGS promotion to require both permissions even for audio; (2) `startForeground()` was called AFTER MediaRecorder setup, missing the 5–10s deadline when setup threw — process crashed with `ForegroundServiceDidNotStartInTimeException`; (3) cascading `RuntimeException: start failed`. Fix: new `promoteToForeground(type)` called FIRST in `onStartCommand` with the specific runtime type. |
+| G | "the video and photo import is still not working completely. a copy of the selected photos are still appearing on the local library gallery" | `9ca8d73` | Round 1's fallback lookup by name+size still didn't resolve the photo picker's ephemeral URIs because the picker privacy-strips the MediaStore mapping by design. Fix: switch to `Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)` which opens the legacy gallery picker and returns real MediaStore URIs directly. |
+| H | — (UX hardening tied to Issue F) | `7adfa5c` | `RecorderViewModel.startRecording()` set `showCoverScreen = true` preemptively. If the service failed to record (before Fix F landed), the fake lock stayed up forever. Added a 4-second safety timer — if `RecorderService.isRecording` hasn't turned true by then, auto-dismiss cover. |
+| I | — (docs) | `5617f60` | Two new lesson tables in `docs/ANDROID_BUILD_LESSONS.md`: "Foreground services on Android 14+ (API 34+)" and "MediaStore deletion + picker URIs", so the next project / AI agent avoids the same traps. |
+
+---
+
 ## Issue 1 — App crashes with no way to extract logs
 
 **Status:** FIXED in `4206bee`. See `docs/FIX_PLAN.md` §Fix 1 for what shipped.

@@ -29,6 +29,37 @@ Known limitations (deferred, not blocking):
 
 ---
 
+## Post-testing iterations — Round 1 (2026-04-14)
+
+After the user installed the `f833ba7` APK on a Pixel 6 / Android 16 device and tested, five additional issues came up. All fixed on `master`:
+
+| Fix | Commit | Issue → Resolution |
+|---|---|---|
+| A | `5317a38` | Log file was `app.log` — stock Android text viewers refuse to open it. Renamed to `app.txt` (rotated file `app.txt.1`). Same `logs/` directory in FileProvider so nothing else changed. |
+| B | `e3b2c55` | Record button was a no-op — manifest declared `RECORD_AUDIO`/`CAMERA`/`POST_NOTIFICATIONS` but they were never requested at runtime, so `MediaRecorder.start()` threw `SecurityException` which the service silently swallowed. `RecorderScreen` now wraps the record click in `ActivityResultContracts.RequestMultiplePermissions` — `RECORD_AUDIO` always, `CAMERA` for video, `POST_NOTIFICATIONS` on API 33+. The service's silent catch now also calls `AppLogger.log("recorder", ...)` so any remaining failure is exportable. |
+| C | `1787bbf` | Viewer showed one file at a time; user had to Back → tap → Back → tap to see next photo. `VaultFileViewerScreen` rewritten around `HorizontalPager`. `VaultFileViewerViewModel` now loads all files of the same type as the tapped one (`repository.getFiles(type = initial.fileType).first()`), finds the initial index, exposes `decrypt(file)` suspending fn with a per-fileId cache + Mutex, and `trimCache(centerIndex, keepAround=2)` to garbage-collect temp files on long scrolls. `onCleared` deletes every remaining plaintext temp. |
+| D | `a16f3e8` | Pixel home-swipe dismissed the fake lock. Added `WindowInsetsControllerCompat` immersive-sticky (hides nav bar + status bar) in the `DisposableEffect` that already holds `FLAG_KEEP_SCREEN_ON`. Also added best-effort `Activity.startLockTask() / stopLockTask()` — silent no-op unless the user has enabled "App pinning" in Settings → Security. When enabled, the home gesture is truly blocked until correct-PIN unlock. |
+| E | `a10f5dd` | Photo-picker URIs weren't triggering the system delete dialog. **First attempt at the fix** — stayed on `GetMultipleContents` but added `resolveToMediaStoreUri(pickerUri)` that looks up MediaStore rows by `(DISPLAY_NAME, SIZE)`, plus manifest declarations for `READ_MEDIA_IMAGES/VIDEO` (API 33+) and `READ_EXTERNAL_STORAGE` (`maxSdkVersion=32`) and a permission request flow in `VaultScreen`. **This did not fully work** — see Round 2 for why and the real fix. |
+
+---
+
+## Post-testing iterations — Round 2 (2026-04-14)
+
+User installed the Round 1 APK and tested on the same Pixel 6 / Android 16. The exported `app.txt` showed three distinct errors + three `[FATAL]` blocks, all from the recording path, plus three `Import delete skipped` lines proving the Round 1 picker-URI resolution never actually found MediaStore matches. These fixes landed:
+
+| Fix | Commit | Root cause → Resolution |
+|---|---|---|
+| F — Recording FGS type | `d9e0d53` | Three cascading service bugs all with one root: (a) `SecurityException: Starting FGS with type camera ... requires CAMERA` — on Android 14+ the runtime `foregroundServiceType` must be a subset of the manifest declaration AND each type's permission must be granted. Manifest declares `microphone\|camera` (max); default promotion uses the union, which fails for audio because CAMERA isn't requested. (b) `ForegroundServiceDidNotStartInTimeException` — `startForeground()` was the last line of `startRecording`, after `MediaRecorder.prepare()/start()`, which throws cheerfully. When it did, the catch block logged but never promoted — system killed the process for missing the ~5–10s deadline. (c) `RuntimeException: start failed` — follow-on of (a). Fix: new `promoteToForeground(type)` called FIRST in `onStartCommand` with a runtime type of `FOREGROUND_SERVICE_TYPE_MICROPHONE` for audio and `MICROPHONE\|CAMERA` for video. MediaRecorder setup runs after we're safely foreground; any exception there now stops the FGS cleanly with `stopForeground(STOP_FOREGROUND_REMOVE) + stopSelf()`. |
+| G — Gallery picker | `9ca8d73` | Round 1's `resolveToMediaStoreUri` couldn't find matches even with `READ_MEDIA_*` granted because the system photo picker privacy-strips the picker-URI-to-MediaStore mapping intentionally. Fix: switch from `ActivityResultContracts.GetMultipleContents` (which funnels through `ACTION_GET_CONTENT` → photo picker on API 33+) to a raw `Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)` with `EXTRA_ALLOW_MULTIPLE=true`, launched via `StartActivityForResult`. `ACTION_PICK` opens the legacy gallery picker (stock Gallery / Photos) and returns real `content://media/external/images/media/N` URIs that `createDeleteRequest` can actually delete. The `resolveToMediaStoreUri` code stays as a fallback for gallery apps that return non-MediaStore URIs (cloud, Drive). |
+| H — Cover auto-dismiss | `7adfa5c` | `RecorderViewModel.startRecording()` set `showCoverScreen = true` preemptively. If the service then failed to record (Round 2 Fix F wasn't in), the fake lock stayed up forever with nothing captured. Added a `viewModelScope.launch { delay(4_000); if (!RecorderService.isRecording.value && state.showCoverScreen) ... }` safety net. |
+| I — Docs | `5617f60` | Added two new tables to `docs/ANDROID_BUILD_LESSONS.md` — "Foreground services on Android 14+ (API 34+)" and "MediaStore deletion + picker URIs" — so the next project hits neither trap. |
+
+Round 2 known limitations:
+- **`ACTION_PICK` UI differs:** the legacy gallery picker looks older than Google's photo picker and may default to Google Photos' old picker interface. Functionality is identical; just uglier. If this matters, the real fix is a custom in-app gallery using `MediaStore.Images.Media.query()` — not worth it unless the picker UX becomes a ship-blocker.
+- **Cloud-only Google Photos items** returned by `ACTION_PICK` aren't MediaStore-backed, so can't be deleted. `resolveToMediaStoreUri` still falls back to name+size query; fails gracefully by logging.
+
+---
+
 ## Fix 1 — Add file-based crash logger and log-export UI
 
 **Goal:** User can tap a button in Settings to share the latest crash log.
