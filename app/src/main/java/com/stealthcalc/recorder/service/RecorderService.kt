@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.MediaRecorder
@@ -93,19 +94,74 @@ class RecorderService : Service() {
         when (intent?.action) {
             ACTION_START_AUDIO -> {
                 maxDurationMs = intent.getLongExtra(EXTRA_MAX_DURATION_MS, 4 * 60 * 60 * 1000L)
-                startRecording(RecordingType.AUDIO, null)
+                currentType = RecordingType.AUDIO
+                // Promote to foreground IMMEDIATELY. startForegroundService()
+                // has a ~5–10 second deadline; the previous code only called
+                // startForeground() after MediaRecorder.prepare()/start(),
+                // which can throw — missing the deadline and crashing the
+                // process with ForegroundServiceDidNotStartInTimeException.
+                // If MediaRecorder setup later fails, startRecording()
+                // unwinds with stopForeground + stopSelf.
+                if (promoteToForeground(RecordingType.AUDIO)) {
+                    startRecording(RecordingType.AUDIO, null)
+                }
             }
             ACTION_START_VIDEO -> {
                 val facingStr = intent.getStringExtra(EXTRA_CAMERA_FACING) ?: CameraFacing.BACK.name
                 currentFacing = CameraFacing.valueOf(facingStr)
                 maxDurationMs = intent.getLongExtra(EXTRA_MAX_DURATION_MS, 1 * 60 * 60 * 1000L)
-                startRecording(RecordingType.VIDEO, currentFacing)
+                currentType = RecordingType.VIDEO
+                if (promoteToForeground(RecordingType.VIDEO)) {
+                    startRecording(RecordingType.VIDEO, currentFacing)
+                }
             }
             ACTION_STOP -> {
                 stopRecording()
             }
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Call startForeground with a runtime foregroundServiceType that's a
+     * SUBSET of what the manifest declares. The manifest declares
+     * microphone|camera (the maximum); at runtime we use:
+     *   - MICROPHONE only for AUDIO
+     *   - MICROPHONE | CAMERA for VIDEO
+     *
+     * Android 14+ requires that runtime type matches what the app has
+     * been granted. Without this split, an AUDIO recording would promote
+     * with camera type and fail with SecurityException because we never
+     * request CAMERA for audio-only sessions (observed on Pixel 6 /
+     * Android 16 target SDK 35).
+     *
+     * Returns true on success. On failure the exception is logged and
+     * the service stops itself — the caller should NOT continue.
+     */
+    private fun promoteToForeground(type: RecordingType): Boolean {
+        return try {
+            val notification = createNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val fgsType = if (type == RecordingType.VIDEO) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                }
+                startForeground(NOTIFICATION_ID, notification, fgsType)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (e: Exception) {
+            AppLogger.log(
+                applicationContext,
+                "recorder",
+                "promoteToForeground failed (${type.name}): ${e.javaClass.simpleName}: ${e.message}"
+            )
+            stopSelf()
+            false
+        }
     }
 
     private fun startRecording(type: RecordingType, facing: CameraFacing?) {
@@ -172,21 +228,22 @@ class RecorderService : Service() {
                 }
             }
 
-            // Show covert notification
-            startForeground(NOTIFICATION_ID, createNotification())
+            // Note: the foreground notification is already up — it was
+            // posted by promoteToForeground() in onStartCommand before
+            // we touched MediaRecorder. Nothing more to do here on success.
 
         } catch (e: Exception) {
             cleanupRecorder()
             _isRecording.value = false
-            // Previously this failure was completely silent — which left
-            // the user with a "dead" record button. Log it so the crash-log
-            // export can surface the root cause (e.g. missing RECORD_AUDIO
-            // grant, camera busy, foreground service restrictions).
             AppLogger.log(
                 applicationContext,
                 "recorder",
                 "startRecording failed (${type.name}): ${e.javaClass.simpleName}: ${e.message}"
             )
+            // Unwind the foreground service we promoted to in onStartCommand
+            // so we don't leak a sticky notification.
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
