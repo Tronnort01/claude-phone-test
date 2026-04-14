@@ -62,6 +62,13 @@ app/src/main/java/com/stealthcalc/
 └── ui/theme/                  # Material 3 theme
 ```
 
+## Runtime Issues — Read Before Coding
+The build works, but the installed APK has 7 runtime/UX bugs reported by the user. Before writing any code:
+1. **Read `docs/ISSUES_FOUND.md`** — detailed diagnosis of each bug (file paths + line numbers).
+2. **Read `docs/FIX_PLAN.md`** — ordered remediation plan with specific code changes.
+3. Work on branch `master`. Each fix = its own commit + push so GitHub Actions can bisect regressions.
+4. Fix #1 (crash logger) FIRST so later crashes are debuggable.
+
 ## Important Notes
 - **Read `docs/ANDROID_BUILD_LESSONS.md` first** — running log of errors and fixes across Android projects, plus a pre-push checklist.
 - The `settings.gradle.kts` uses `dependencyResolutionManagement` (not `dependencyResolution`)
