@@ -125,6 +125,32 @@ class FileEncryptionService @Inject constructor(
     }
 
     /**
+     * Decrypt a previously-saved thumbnail into a Bitmap for display.
+     * Returns null if the file has no thumbnail, the file is missing,
+     * or decryption/decoding fails. Callers should invoke this off the
+     * main thread.
+     */
+    fun decryptThumbnail(vaultFile: VaultFile): Bitmap? {
+        val path = vaultFile.thumbnailPath ?: return null
+        val file = File(path)
+        if (!file.exists()) return null
+        return try {
+            FileInputStream(file).use { fis ->
+                val iv = ByteArray(IV_SIZE)
+                if (fis.read(iv) != IV_SIZE) return null
+                val cipher = Cipher.getInstance(AES_GCM).apply {
+                    init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
+                }
+                CipherInputStream(fis, cipher).use { cis ->
+                    BitmapFactory.decodeStream(cis)
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
      * Decrypt a vault file and return a temporary decrypted File for viewing.
      * The caller is responsible for deleting the temp file after use.
      */

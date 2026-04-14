@@ -1,6 +1,6 @@
 package com.stealthcalc.vault.ui
 
-import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -62,6 +62,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,8 +81,11 @@ import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.model.VaultFolder
 import com.stealthcalc.vault.model.VaultSortOrder
+import com.stealthcalc.vault.service.FileEncryptionService
 import com.stealthcalc.vault.viewmodel.VaultFilter
 import com.stealthcalc.vault.viewmodel.VaultViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -289,6 +293,7 @@ fun VaultScreen(
                             onToggleFavorite = { viewModel.toggleFavorite(file.id) },
                             onDelete = { deleteTarget = file },
                             isGrid = state.isGridView,
+                            encryptionService = viewModel.encryptionService,
                         )
                     }
                 }
@@ -420,6 +425,7 @@ private fun VaultFileCard(
     onToggleFavorite: () -> Unit,
     onDelete: () -> Unit,
     isGrid: Boolean,
+    encryptionService: FileEncryptionService,
 ) {
     val icon: ImageVector = when (file.fileType) {
         VaultFileType.PHOTO -> Icons.Default.CameraAlt
@@ -449,14 +455,19 @@ private fun VaultFileCard(
                     .fillMaxWidth()
                     .aspectRatio(1f)
             ) {
-                // Try to load encrypted thumbnail
-                val thumbBitmap = remember(file.thumbnailPath) {
-                    file.thumbnailPath?.let { path ->
-                        try {
-                            // Thumbnails are encrypted — need to decrypt
-                            // For now show type icon; full decryption in viewer
-                            null
-                        } catch (_: Exception) { null }
+                // Decrypt the encrypted thumbnail off the main thread.
+                // Keyed on id + thumbnailPath so list scrolls don't re-decrypt.
+                val thumbBitmap by produceState<Bitmap?>(
+                    initialValue = null,
+                    key1 = file.id,
+                    key2 = file.thumbnailPath,
+                ) {
+                    value = if (file.thumbnailPath == null) {
+                        null
+                    } else {
+                        withContext(Dispatchers.IO) {
+                            runCatching { encryptionService.decryptThumbnail(file) }.getOrNull()
+                        }
                     }
                 }
 
