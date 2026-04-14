@@ -3,6 +3,9 @@ package com.stealthcalc.recorder.ui
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -75,15 +78,36 @@ fun FakeLockScreen(
 
     // Keep the device screen on while the fake lock is shown so the
     // display doesn't auto-sleep and interrupt the underlying recording.
-    // We add FLAG_KEEP_SCREEN_ON to the hosting Activity's window and
-    // clear it when this composable leaves the tree so every other screen
-    // returns to normal screen-timeout behavior.
+    // Also hide the status and navigation bars (immersive sticky) so the
+    // Pixel home-swipe indicator is gone and there's no visual affordance
+    // to leave the fake lock. True lockdown against the home gesture
+    // requires startLockTask() (screen pinning) — we attempt that too
+    // but it only succeeds if the user has enabled App Pinning under
+    // Settings → Security, so the immersive flags are the always-on
+    // baseline.
     val context = LocalContext.current
     DisposableEffect(Unit) {
-        val window = (context as? Activity)?.window
+        val activity = context as? Activity
+        val window = activity?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        val insetsController = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        insetsController?.apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+
+        // Best-effort app pinning. Only takes effect on devices where the
+        // user enabled "App pinning" in Settings → Security; otherwise the
+        // call is a no-op. When it DOES take effect, the home gesture,
+        // overview, and power-button long press are all blocked until
+        // stopLockTask() is called on correct-PIN unlock.
+        runCatching { activity?.startLockTask() }
+
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            insetsController?.show(WindowInsetsCompat.Type.systemBars())
+            runCatching { activity?.stopLockTask() }
         }
     }
 
