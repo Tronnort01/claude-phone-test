@@ -64,6 +64,53 @@ Before pushing any Android project, verify:
 | `Cannot find implementation for Foo_Impl` | Room's KSP processor didn't run | Ensure `ksp(libs.androidx.room.compiler)` is in `app/build.gradle.kts` AND the KSP plugin is applied |
 | `Error:... cannot be provided without an @Inject constructor or an @Provides-annotated method` | Hilt can't resolve a dependency | Either add `@Inject` to the constructor or add a `@Provides` method in a `@Module` |
 | `@HiltAndroidApp not found` | Application class missing annotation | Ensure `android:name=".YourApp"` in manifest and the class has `@HiltAndroidApp` |
+| Service needs field injection | Hilt supports `@AndroidEntryPoint` on Services — fields can be `@Inject lateinit var` just like Activities | Annotate the class, declare `@Inject lateinit var foo: Foo` |
+| DB schema change on pre-release | Writing migrations is overhead for an unshipped app | `.fallbackToDestructiveMigration()` in `Room.databaseBuilder` means version bumps silently drop/recreate tables. Fine for dev, unsafe for prod |
+
+### AGP 8 BuildConfig
+
+| Error | Cause | Fix |
+|---|---|---|
+| `Unresolved reference 'BuildConfig'` in AGP 8.x | Since AGP 8.0, `buildConfig` is **off by default**. `BuildConfig.VERSION_NAME`, `BuildConfig.APPLICATION_ID` etc. aren't generated | Either (a) enable in `android { buildFeatures { buildConfig = true } }`, OR (b) read at runtime via `context.packageManager.getPackageInfo(context.packageName, 0)` — use `info.longVersionCode` on API 28+, deprecated `info.versionCode` below |
+
+### Compose / Material3 API drift
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `LinearProgressIndicator(progress = { ... }, ...)` won't compile | The `progress: () -> Float` lambda overload was added in Material3 1.3.0. Compose BOM 2024.08.00 ships Material3 1.2.1 which only has `progress: Float` | Use the scalar form: `progress = progress.coerceIn(0f, 1f)` |
+| `LocalLifecycleOwner` deprecation warning | Compose UI 1.7+ deprecated `androidx.compose.ui.platform.LocalLifecycleOwner` in favor of `androidx.lifecycle.compose.LocalLifecycleOwner` | BOM 2024.08.00 is Compose UI 1.6.8 where the original import still works; either is accepted. Use `androidx.lifecycle.compose` going forward if lifecycle 2.8+ is on the classpath |
+| `combine()` call with 6+ flows | `combine` has concrete overloads only up to 5 flows; 6+ needs the vararg form with `Array<Any?>` | Use `combine(flow1, flow2, ...flowN) { values -> ... }` where the lambda takes `Array<Any?>` and you index + cast each slot |
+
+### MediaStore delete on modern Android
+
+| API level | Direct `contentResolver.delete(uri, null, null)` behavior | Correct approach |
+|---|---|---|
+| API ≤28 | Works; deletes immediately | Direct call is fine |
+| API 29 | Throws `RecoverableSecurityException` for files owned by other apps (Camera, Photos) | Catch it, launch `rse.userAction.actionIntent.intentSender` via `StartIntentSenderForResult` |
+| API 30+ | Silently returns 0 rows (no grant, no exception) | Bulk: `MediaStore.createDeleteRequest(contentResolver, uris)` → one `PendingIntent.intentSender` that approves all at once |
+
+Bridge from ViewModel to Compose launcher: expose `StateFlow<IntentSender?>` from the VM, collect it with `collectAsStateWithLifecycle`, `LaunchedEffect(sender)` launches via `IntentSenderRequest.Builder(sender).build()`, then the VM's `onHandled()` sets the StateFlow back to `null` so it doesn't re-fire on recomposition.
+
+### FileProvider
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `IllegalArgumentException: Failed to find configured root` | `file_provider_paths.xml` doesn't have an entry whose `path` covers the file you're trying to serve | Add the right path type: `<files-path>` for `filesDir/`, `<cache-path>` for `cacheDir/`, `<external-files-path>` for `getExternalFilesDir()`. Use `path="."` to include the whole root |
+| Meta-data reference doesn't resolve | Meta-data name must be exactly `android.support.FILE_PROVIDER_PATHS` (legacy support namespace, still correct) | Use that exact string regardless of AndroidX migration |
+| `androidx.core.content.FileProvider` class missing | Forgot the dep | Already included by `androidx.core:core-ktx` — no extra dep needed |
+
+### Service lifecycle + coroutines
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Background work started in a Service doesn't finish before process is killed | `stopForeground(STOP_FOREGROUND_REMOVE)` + `stopSelf()` allow the OS to reap the process at any time; coroutines started before stop can be cancelled mid-flight | Do the work on the service scope, THEN call stopForeground/stopSelf inside the coroutine's completion block. Keep the foreground notification alive until background work is done |
+| Coroutine cancelled when service destroyed | Default `serviceScope` uses a `Job()` that isn't tied to service lifecycle — fine if you WANT it to survive; bad if you need clean cancellation | Decide explicitly: cancel the scope in `onDestroy()` for clean shutdown, or let coroutines outlive the service if they need to finish durable work |
+
+### Kotlin name shadowing
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `fun importFiles(deleteOriginals: Boolean) { ... deleteOriginals(uris) ... }` — the inner call resolves to the Boolean param, not the private method | Kotlin's function/property namespace is shared within a scope. A Boolean parameter shadows a same-named function and makes `name(args)` fail because Boolean isn't invokable | Rename the function (`requestOriginalsDeletion`) or the parameter to make the call site unambiguous |
 
 ### Build / Workflow
 
@@ -193,3 +240,19 @@ grep -rh "^import com\.yourapp\." app/src/main/java --include="*.kt" | sort -u \
 - Missing `BootReceiver` class — fixed in `87a5009`
 - Missing `VaultSortOrder` import (enum existed, import was missing) — fixed in `e93d2c2`
 - Wrong GeckoView APIs (`cookieBannerMode`, nullable `telemetryDelegate`) — fixed in `ccdf5d0`
+
+### 2026-04-14 session — 7 runtime bugs closed (commits `4206bee`..`f833ba7`)
+
+- **Fix 1 (`4206bee`)** — file-based crash logger + Settings "Export crash log". Uses `FileProvider` under `files-path name="logs"`, reads build/version via `PackageManager.getPackageInfo()` (BuildConfig not enabled in AGP 8.5.2).
+- **Fix 2 (`90790de`)** — persist the PIN in `onSetupComplete`. Threaded `SecretCodeManager` as a parameter from `MainActivity` through `AppRoot`. Added defensive `NotSetup → None` guard in `CalculatorViewModel` for corrupted-prefs edge case.
+- **Fix 3a (`3d6b8fc`)** — decrypt vault thumbnails with `FileEncryptionService.decryptThumbnail()` (inverse of existing `saveThumbnail`). `produceState<Bitmap?>` keyed on `(file.id, file.thumbnailPath)` so list scroll doesn't re-decrypt.
+- **Fix 3b (`5c25c09`)** — vault file viewer using framework-only renderers: `BitmapFactory.decodeFile` for photos, `VideoView + MediaController` for video, `MediaPlayer` + Compose for audio, `Intent.ACTION_VIEW` + `FileProvider` for docs. `DisposableEffect` releases `MediaPlayer`; `Lifecycle.Event.ON_STOP` auto-pauses. `cache-path` added to `file_provider_paths.xml` for external open-with intents.
+- **Fix 3c (`1f3a351`)** — `MediaStore.createDeleteRequest` on API 30+, `RecoverableSecurityException.userAction.actionIntent.intentSender` on API 29, direct delete on ≤28. Bridged via `StateFlow<IntentSender?>` + `StartIntentSenderForResult`.
+- **Fix 4 (`583ca17`)** — `RecorderService` @Injects `FileEncryptionService` and `VaultRepository`, chains encrypt → `vaultRepository.saveFile` → post `Recording` → `source.delete()` → `stopForeground + stopSelf` inside the coroutine so the process survives mid-encryption. `Recording.vaultFileId` added; DB 5 → 6.
+- **Fix 5 (`f833ba7`)** — `BackHandler(enabled = true) { /* no-op */ }` + `DisposableEffect` toggling `FLAG_KEEP_SCREEN_ON` on the host Activity window. Foreground service type `microphone|camera` was already correct; no WakeLock needed.
+
+Session-wide process notes that paid off:
+- **Commit-per-fix** meant any regression could be isolated to one commit when Actions turned red.
+- **Fix 1 first** was the single best ordering decision — every subsequent on-device failure is exportable from Settings → Diagnostics without ADB.
+- **Framework over libraries** for media playback avoided touching `libs.versions.toml` / `app/build.gradle.kts` at all. Build surface was tiny (0 new deps across 7 fixes).
+- **Double-check API availability vs. BOM version** — Material3 `LinearProgressIndicator(progress: () -> Float)` looked obvious but is 1.3+, not in BOM 2024.08.00 (1.2.1). Generally assume the lower end of whatever the BOM pins.

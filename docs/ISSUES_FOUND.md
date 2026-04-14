@@ -3,12 +3,32 @@
 Detailed findings from code audit in response to user runtime reports. Companion doc: `docs/FIX_PLAN.md` has the remediation plan.
 
 **Repo state when audit ran:** `master` HEAD = `78849f3`.
-**Branch to work on next:** `master` (all recent work is merged there).
+**Branch worked on:** `master` (all recent work is merged there).
 **Build state:** master builds successfully and the APK installs. Everything below is a runtime / UX problem, NOT a build problem.
 
 ---
 
+## Status (updated 2026-04-14 post-fix)
+
+All seven issues below are **FIXED**. Commits on `master`:
+
+| # | Commit | Area |
+|---|---|---|
+| 1 | `4206bee` | File-based crash logger + Settings "Export crash log" |
+| 2 | `90790de` | Persist PIN on setup; defensive `NotSetup` guard |
+| 3a | `3d6b8fc` | Decrypt vault thumbnails for the grid |
+| 3b | `5c25c09` | Vault file viewer (photo/video/audio/open-with) |
+| 3c | `1f3a351` | Real gallery deletion via MediaStore PendingIntent |
+| 4 | `583ca17` | Recordings encrypt → vault on stop; plaintext deleted |
+| 5 | `f833ba7` | Fake lock screen disables Back + keeps screen on |
+
+Each fix is its own commit, pushable and bisectable by GitHub Actions. See `docs/FIX_PLAN.md` for what shipped per fix + any deviations from the original plan.
+
+---
+
 ## Issue 1 — App crashes with no way to extract logs
+
+**Status:** FIXED in `4206bee`. See `docs/FIX_PLAN.md` §Fix 1 for what shipped.
 
 **User report:** "the app keeps crashing. you should add an app log that I can extract while running app."
 
@@ -19,6 +39,8 @@ Detailed findings from code audit in response to user runtime reports. Companion
 ---
 
 ## Issue 2 — Secret-code setup accepts any new code (PIN not persisted)
+
+**Status:** FIXED in `90790de`. See `docs/FIX_PLAN.md` §Fix 2 for what shipped.
 
 **User report:** "the secret code setup signin keeps accepting a new code and allows anyone to access. it should only allow once and then keep it as memory like other pin logins."
 
@@ -34,6 +56,8 @@ Detailed findings from code audit in response to user runtime reports. Companion
 ---
 
 ## Issue 3 — Vault thumbnails, viewer, and gallery deletion all broken
+
+**Status:** FIXED across `3d6b8fc` (3a), `5c25c09` (3b), `1f3a351` (3c). See `docs/FIX_PLAN.md` §Fix 3a/3b/3c.
 
 ### 3a. Thumbnails never display
 
@@ -76,6 +100,8 @@ The current `catch (_: Exception) {}` silently swallows the failure.
 
 ## Issue 4 — Voice/video recordings never reach the secure vault
 
+**Status:** FIXED in `583ca17`. See `docs/FIX_PLAN.md` §Fix 4 for what shipped.
+
 **User report:** "when recording voice, video, I don't see files being saved. they should save automatically to my secure vault."
 
 **Root cause:** Recordings are saved to plaintext files under the app's `filesDir/recordings/`, tracked only in the Recording table — they are NEVER encrypted and NEVER inserted into the vault DB.
@@ -90,6 +116,8 @@ The current `catch (_: Exception) {}` silently swallows the failure.
 ---
 
 ## Issue 5 — Fake lock screen doesn't actually lock the device
+
+**Status:** FIXED in `f833ba7`. See `docs/FIX_PLAN.md` §Fix 5 for what shipped.
 
 **User report:** "when making a recording, I like mimic home screen. however the back button should be disabled because it immediately takes me back to the app which defeats the purpose. the only way out of stealth recording should be by correct pin value. also the phone should not turn off, it should keep recording until someone enters correct pin. it can go to a fake black screen if necessary."
 
