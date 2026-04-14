@@ -1,22 +1,30 @@
 package com.stealthcalc.recorder.service
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import android.util.Size
-import android.view.Surface
+import androidx.camera.core.CameraSelector
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording as CameraXRecording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleService
 import com.stealthcalc.MainActivity
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.recorder.model.CameraFacing
@@ -44,7 +52,7 @@ import java.util.UUID
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class RecorderService : Service() {
+class RecorderService : LifecycleService() {
 
     companion object {
         const val ACTION_START_AUDIO = "com.stealthcalc.START_AUDIO"
@@ -90,9 +98,22 @@ class RecorderService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var wakeLock: PowerManager.WakeLock? = null
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    // CameraX VideoCapture pipeline. Video recordings go through
+    // CameraX Recorder + VideoCapture bound to this LifecycleService,
+    // not MediaRecorder.VideoSource.CAMERA (which is the legacy Camera1
+    // path and silently fails on Pixel 6 / Android 16 because we never
+    // hold an explicit Camera instance).
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var videoRecording: CameraXRecording? = null
+
+    override fun onBind(intent: Intent): IBinder? {
+        super.onBind(intent)
+        return null
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_START_AUDIO -> {
                 maxDurationMs = intent.getLongExtra(EXTRA_MAX_DURATION_MS, 4 * 60 * 60 * 1000L)
@@ -207,6 +228,18 @@ class RecorderService : Service() {
             it.parentFile?.mkdirs()
         }
 
+        if (type == RecordingType.VIDEO) {
+            startVideoRecording(facing ?: CameraFacing.BACK)
+        } else {
+            startAudioRecording()
+        }
+    }
+
+    /**
+     * Audio path: MediaRecorder with AudioSource.MIC. Works fine on
+     * modern Android with no camera dependencies.
+     */
+    private fun startAudioRecording() {
         try {
             mediaRecorder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 MediaRecorder(this)
@@ -214,26 +247,12 @@ class RecorderService : Service() {
                 @Suppress("DEPRECATION")
                 MediaRecorder()
             }).apply {
-                if (type == RecordingType.VIDEO) {
-                    setAudioSource(MediaRecorder.AudioSource.MIC)
-                    setVideoSource(MediaRecorder.VideoSource.CAMERA)
-                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    setAudioEncodingBitRate(128_000)
-                    setAudioSamplingRate(44_100)
-                    setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-                    setVideoEncodingBitRate(2_000_000)
-                    setVideoFrameRate(30)
-                    setVideoSize(1280, 720)
-                    if (maxDurationMs > 0) setMaxDuration(maxDurationMs.toInt())
-                } else {
-                    setAudioSource(MediaRecorder.AudioSource.MIC)
-                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    setAudioEncodingBitRate(128_000)
-                    setAudioSamplingRate(44_100)
-                    if (maxDurationMs > 0) setMaxDuration(maxDurationMs.toInt())
-                }
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setAudioEncodingBitRate(128_000)
+                setAudioSamplingRate(44_100)
+                if (maxDurationMs > 0) setMaxDuration(maxDurationMs.toInt())
                 setOutputFile(outputFile!!.absolutePath)
                 setOnInfoListener { _, what, _ ->
                     if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
@@ -246,40 +265,167 @@ class RecorderService : Service() {
 
             startTimeMs = System.currentTimeMillis()
             _isRecording.value = true
-            _recordingType.value = type
+            _recordingType.value = RecordingType.AUDIO
             _currentRecordingId.value = recordingId
             _elapsedMs.value = 0
 
-            // Start elapsed timer
             timerJob = serviceScope.launch {
                 while (isActive && _isRecording.value) {
                     _elapsedMs.value = System.currentTimeMillis() - startTimeMs
                     delay(500)
                 }
             }
-
-            // Note: the foreground notification is already up — it was
-            // posted by promoteToForeground() in onStartCommand before
-            // we touched MediaRecorder. Nothing more to do here on success.
-
         } catch (e: Exception) {
             cleanupRecorder()
             _isRecording.value = false
             AppLogger.log(
                 applicationContext,
                 "recorder",
-                "startRecording failed (${type.name}): ${e.javaClass.simpleName}: ${e.message}"
+                "startAudioRecording failed: ${e.javaClass.simpleName}: ${e.message}"
             )
-            // Unwind the foreground service we promoted to in onStartCommand
-            // so we don't leak a sticky notification.
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
 
+    /**
+     * Video path: CameraX Recorder + VideoCapture bound to this
+     * LifecycleService. Replaces the previously-broken
+     * MediaRecorder.VideoSource.CAMERA code which used the legacy
+     * Camera1 API implicitly and silently failed on modern Android
+     * because we never held an explicit Camera instance.
+     *
+     * Lifecycle events from `prepareRecording(...).start(executor, listener)`
+     * fire on the main thread; mutating service state from the listener
+     * is safe (serviceScope is Dispatchers.Main). Vault persistence
+     * happens on Dispatchers.IO inside serviceScope.launch so encrypt
+     * doesn't stall the main thread.
+     */
+    @SuppressLint("MissingPermission") // caller gated on RECORD_AUDIO + CAMERA
+    private fun startVideoRecording(facing: CameraFacing) {
+        val out = outputFile ?: return
+        val providerFuture = ProcessCameraProvider.getInstance(this)
+        providerFuture.addListener({
+            try {
+                val provider = providerFuture.get()
+                cameraProvider = provider
+
+                val qualitySelector = QualitySelector.fromOrderedList(
+                    listOf(Quality.HD, Quality.SD, Quality.LOWEST),
+                    FallbackStrategy.lowerQualityOrHigherThan(Quality.LOWEST)
+                )
+                val recorder = Recorder.Builder()
+                    .setQualitySelector(qualitySelector)
+                    .build()
+                val capture = VideoCapture.withOutput(recorder)
+                videoCapture = capture
+
+                val selector = when (facing) {
+                    CameraFacing.FRONT -> CameraSelector.DEFAULT_FRONT_CAMERA
+                    CameraFacing.BACK -> CameraSelector.DEFAULT_BACK_CAMERA
+                }
+                provider.unbindAll()
+                provider.bindToLifecycle(this@RecorderService, selector, capture)
+
+                val fileOpts = FileOutputOptions.Builder(out).build()
+                val pending = capture.output
+                    .prepareRecording(this@RecorderService, fileOpts)
+                    .withAudioEnabled()
+
+                videoRecording = pending.start(
+                    ContextCompat.getMainExecutor(this@RecorderService)
+                ) { event -> handleVideoRecordEvent(event) }
+            } catch (e: Exception) {
+                AppLogger.log(
+                    applicationContext,
+                    "recorder",
+                    "startVideoRecording failed: ${e.javaClass.simpleName}: ${e.message}"
+                )
+                cleanupVideo()
+                _isRecording.value = false
+                releaseWakeLock()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun handleVideoRecordEvent(event: VideoRecordEvent) {
+        when (event) {
+            is VideoRecordEvent.Start -> {
+                startTimeMs = System.currentTimeMillis()
+                _isRecording.value = true
+                _recordingType.value = RecordingType.VIDEO
+                _currentRecordingId.value = recordingId
+                _elapsedMs.value = 0
+                timerJob = serviceScope.launch {
+                    while (isActive && _isRecording.value) {
+                        _elapsedMs.value = System.currentTimeMillis() - startTimeMs
+                        delay(500)
+                    }
+                }
+            }
+            is VideoRecordEvent.Finalize -> {
+                val duration = System.currentTimeMillis() - startTimeMs
+                val file = outputFile
+                val id = recordingId
+                val facing = currentFacing
+                val startTime = startTimeMs
+                if (event.hasError() && event.error != VideoRecordEvent.Finalize.ERROR_NONE) {
+                    AppLogger.log(
+                        applicationContext,
+                        "recorder",
+                        "VideoRecordEvent.Finalize error=${event.error} cause=${event.cause?.message}"
+                    )
+                }
+                cleanupVideo()
+                timerJob?.cancel()
+                _isRecording.value = false
+                _recordingType.value = null
+                _currentRecordingId.value = null
+                _elapsedMs.value = 0
+
+                if (file != null && file.exists() && file.length() > 0 && id != null) {
+                    serviceScope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            persistRecordingToVault(
+                                file, id, RecordingType.VIDEO, facing, startTime, duration
+                            )
+                        }
+                        _lastCompletedRecording.value = RecordingResult(recording = result)
+                        releaseWakeLock()
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                } else {
+                    releaseWakeLock()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+            }
+            else -> { /* Status / Pause / Resume — not used */ }
+        }
+    }
+
+    private fun cleanupVideo() {
+        runCatching { videoRecording?.close() }
+        videoRecording = null
+        runCatching { cameraProvider?.unbindAll() }
+        videoCapture = null
+        cameraProvider = null
+    }
+
     private fun stopRecording() {
         if (!_isRecording.value) return
+
+        // For video, stop() triggers VideoRecordEvent.Finalize which
+        // drives cleanup + vault persist + stopSelf (see
+        // handleVideoRecordEvent). Don't duplicate that work here.
+        if (currentType == RecordingType.VIDEO) {
+            runCatching { videoRecording?.stop() }
+            return
+        }
 
         val duration = System.currentTimeMillis() - startTimeMs
         val file = outputFile
@@ -421,7 +567,9 @@ class RecorderService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { videoRecording?.stop() }
         stopRecording()
+        cleanupVideo()
         releaseWakeLock()
         super.onDestroy()
     }
