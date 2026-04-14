@@ -112,15 +112,12 @@ fun BrowserScreen(
                         if (cookiesEnabled) ContentBlocking.CookieBehavior.ACCEPT_NON_TRACKERS
                         else ContentBlocking.CookieBehavior.ACCEPT_NONE
                     )
-                    // Block cookie banners automatically
-                    .cookieBannerMode(ContentBlocking.CookieBannerMode.COOKIE_BANNER_REJECT_ALL)
                     .build()
             )
             .aboutConfigEnabled(false)
             .webManifest(false)
             .consoleOutput(false)
             .crashHandler(null)
-            .telemetryDelegate(null)
             .build()
 
         GeckoRuntime.create(context, settings)
