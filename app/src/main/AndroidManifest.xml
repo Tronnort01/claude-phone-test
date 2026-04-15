@@ -17,6 +17,13 @@
          recording-in-progress. Released when stopRecording finishes. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Round 4 Feature A: lets the user exempt the app from Doze /
+         battery optimization so the foreground recorder service isn't
+         killed during long recordings. Prompted from Settings; the
+         intent ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS opens
+         Android's system dialog. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Used to look up MediaStore URIs that match photo-picker content URIs,
          so that originals can be deleted after importing into the vault.
          See VaultViewModel.resolveToMediaStoreUri. -->

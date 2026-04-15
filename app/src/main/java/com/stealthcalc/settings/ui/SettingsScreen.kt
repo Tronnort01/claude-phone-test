@@ -1,7 +1,14 @@
 package com.stealthcalc.settings.ui
 
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -110,6 +117,51 @@ fun SettingsScreen(
                 onToggle = viewModel::toggleBiometric
             )
 
+            // Round 4 Feature A: battery optimization exemption.
+            // Without this, a recording-in-progress can be silently killed
+            // by Doze once the device screen has been off for ~15 minutes
+            // — the foreground service gets reaped even with our wake lock.
+            // The ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent opens
+            // a system dialog; we re-check on return via
+            // rememberLauncherForActivityResult so the subtitle updates.
+            val context = LocalContext.current
+            var batteryExempt by remember {
+                mutableStateOf(isIgnoringBatteryOptimizations(context))
+            }
+            val batteryOptLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) {
+                batteryExempt = isIgnoringBatteryOptimizations(context)
+            }
+            SettingsRow(
+                title = "Disable Battery Optimization",
+                subtitle = if (batteryExempt)
+                    "Enabled — recordings won't be killed by Doze"
+                else
+                    "Tap to enable — protects long recordings from Doze",
+                onClick = {
+                    if (batteryExempt) {
+                        // Already exempt; open the settings page so the user
+                        // can revoke if desired — don't auto-revoke silently.
+                        runCatching {
+                            batteryOptLauncher.launch(
+                                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                            )
+                        }
+                    } else {
+                        runCatching {
+                            batteryOptLauncher.launch(
+                                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                    .setData(Uri.parse("package:${context.packageName}"))
+                            )
+                        }.onFailure {
+                            Toast.makeText(context, "Couldn't open battery settings", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+            )
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             // --- Decoy section ---
@@ -160,7 +212,6 @@ fun SettingsScreen(
             // --- Diagnostics section ---
             SectionHeader("Diagnostics")
 
-            val context = LocalContext.current
             SettingsRow(
                 title = "Export crash log",
                 subtitle = "Share the latest app.log file",
@@ -384,6 +435,17 @@ private fun SettingsRow(
         }
         trailing?.invoke()
     }
+}
+
+/**
+ * Check whether the calculator has been granted exemption from battery
+ * optimization. Returns true on API < 23 (no such concept) so the row
+ * shows "Enabled" and nothing bad happens on older devices.
+ */
+private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+    return pm.isIgnoringBatteryOptimizations(context.packageName)
 }
 
 @Composable
