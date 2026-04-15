@@ -24,6 +24,15 @@
          Android's system dialog. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Round 4 Feature B: SYSTEM_ALERT_WINDOW lets OverlayLockService
+         draw the fake-lock overlay on top of other apps / the home
+         launcher. Used ONLY while a recording is in progress and ONLY
+         if the user has opted in via Settings → "Use secure overlay
+         lock". Requires the user to additionally grant the permission
+         via Settings.ACTION_MANAGE_OVERLAY_PERMISSION — declaring in
+         the manifest is necessary but not sufficient on API 23+. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- Used to look up MediaStore URIs that match photo-picker content URIs,
          so that originals can be deleted after importing into the vault.
          See VaultViewModel.resolveToMediaStoreUri. -->
@@ -59,6 +68,15 @@
             android:name=".recorder.service.RecorderService"
             android:exported="false"
             android:foregroundServiceType="microphone|camera" />
+
+        <!-- Round 4 Feature B: overlay lock service. NOT a foreground
+             service — it runs only while the overlay view is attached,
+             and the recorder's own foreground service keeps the process
+             alive. Exported=false; no external caller should be able to
+             pop our fake lock. -->
+        <service
+            android:name=".recorder.service.OverlayLockService"
+            android:exported="false" />
 
         <receiver
             android:name=".core.notifications.BootReceiver"

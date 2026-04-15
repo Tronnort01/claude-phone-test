@@ -131,7 +131,11 @@ fun RecorderScreen(
                 onSelectCamera = viewModel::selectCamera,
                 onStartRecording = startRecordingWithPermissions,
                 onStopRecording = viewModel::stopRecording,
-                onShowCover = viewModel::enterCoverScreen,
+                // Round 4 Feature B: pass the secretPin through so the
+                // ViewModel can hand it to OverlayLockBus when starting
+                // the overlay service. The overlay runs in the same
+                // process so no IPC is needed.
+                onShowCover = { viewModel.enterCoverScreen(secretPin) },
                 onNavigateToRecordings = onNavigateToRecordings,
             )
         }

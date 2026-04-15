@@ -20,6 +20,7 @@ data class SettingsState(
     val isScreenshotBlocked: Boolean = true,
     val isBiometricEnabled: Boolean = false,
     val isDecoyEnabled: Boolean = false,
+    val isOverlayLockEnabled: Boolean = false,
     // Change code
     val showChangeCodeDialog: Boolean = false,
     val changeCodeError: String? = null,
@@ -40,6 +41,10 @@ class SettingsViewModel @Inject constructor(
         private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
         private const val KEY_PANIC_BACK = "panic_back_enabled"
         private const val KEY_SCREENSHOT_BLOCKED = "screenshot_blocked"
+        // Round 4 Feature B: user opts in to the SYSTEM_ALERT_WINDOW
+        // overlay. The row only takes effect if Settings.canDrawOverlays
+        // is true; the Settings UI walks the user through granting.
+        const val KEY_OVERLAY_LOCK_ENABLED = "overlay_lock_enabled"
     }
 
     private val _state = MutableStateFlow(
@@ -50,9 +55,15 @@ class SettingsViewModel @Inject constructor(
             isScreenshotBlocked = prefs.getBoolean(KEY_SCREENSHOT_BLOCKED, true),
             isBiometricEnabled = biometricHelper.isBiometricEnabled,
             isDecoyEnabled = secretCodeManager.isDecoyEnabled,
+            isOverlayLockEnabled = prefs.getBoolean(KEY_OVERLAY_LOCK_ENABLED, false),
         )
     )
     val state: StateFlow<SettingsState> = _state.asStateFlow()
+
+    fun setOverlayLockEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_OVERLAY_LOCK_ENABLED, enabled).apply()
+        _state.update { it.copy(isOverlayLockEnabled = enabled) }
+    }
 
     val autoLockOptions = listOf(
         10_000L to "10 seconds",

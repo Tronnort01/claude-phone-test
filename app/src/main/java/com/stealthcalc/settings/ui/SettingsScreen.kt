@@ -133,6 +133,43 @@ fun SettingsScreen(
             ) {
                 batteryExempt = isIgnoringBatteryOptimizations(context)
             }
+            // Round 4 Feature B: secure overlay lock.
+            // Toggle is only useful if Settings.canDrawOverlays is also
+            // true. We track the grant state locally so the subtitle
+            // reflects reality.
+            var overlayGranted by remember { mutableStateOf(canDrawOverlaysCompat(context)) }
+            val overlayPermLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) {
+                overlayGranted = canDrawOverlaysCompat(context)
+            }
+            SettingsToggle(
+                title = "Secure Overlay Lock",
+                subtitle = when {
+                    !overlayGranted && state.isOverlayLockEnabled ->
+                        "Needs overlay permission — tap to grant"
+                    state.isOverlayLockEnabled ->
+                        "Enabled — lock stays on top even after home-swipe"
+                    else ->
+                        "Use a system overlay instead of the in-app cover"
+                },
+                checked = state.isOverlayLockEnabled,
+                onToggle = {
+                    val newEnabled = !state.isOverlayLockEnabled
+                    viewModel.setOverlayLockEnabled(newEnabled)
+                    if (newEnabled && !overlayGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        runCatching {
+                            overlayPermLauncher.launch(
+                                Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                            )
+                        }
+                    }
+                }
+            )
+
             SettingsRow(
                 title = "Disable Battery Optimization",
                 subtitle = if (batteryExempt)
@@ -446,6 +483,15 @@ private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
     val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
     return pm.isIgnoringBatteryOptimizations(context.packageName)
+}
+
+/**
+ * Round 4 Feature B helper — true on API < 23 (no overlay permission
+ * concept there; manifest declaration was sufficient).
+ */
+private fun canDrawOverlaysCompat(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+    return Settings.canDrawOverlays(context)
 }
 
 @Composable
