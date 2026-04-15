@@ -153,12 +153,42 @@ class FileEncryptionService @Inject constructor(
     /**
      * Decrypt a vault file and return a temporary decrypted File for viewing.
      * The caller is responsible for deleting the temp file after use.
+     *
+     * IMPORTANT: the temp filename is deliberately `view_<uuid>.<ext>` with
+     * NO human-readable original name embedded. Recorder-produced
+     * `VaultFile.originalName` is a user-facing title like
+     * "Video Apr 14, 2026 08:30.mp4" which contains colons, commas and
+     * spaces. When that lands in the cache path and we hand
+     * `tempFile.absolutePath` to `VideoView.setVideoPath` / `MediaPlayer
+     * .setDataSource`, the underlying `Uri.parse(path)` call mangles the
+     * string and `MediaPlayer.prepare()` throws `IOException: Prepare
+     * failed.: status=0x1` — exactly the crash captured in 0f9037b. Using
+     * a uuid + extension avoids the whole class of filename-parsing bugs.
      */
     fun decryptToTempFile(vaultFile: VaultFile): File {
         val encFile = File(vaultFile.encryptedPath)
-        val tempFile = File(context.cacheDir, "view_${vaultFile.id}_${vaultFile.originalName}")
+        val tempFile = File(context.cacheDir, "view_${vaultFile.id}${extensionFor(vaultFile)}")
         decryptFile(encFile, tempFile)
         return tempFile
+    }
+
+    /**
+     * Pick a filesystem-safe extension for the decrypted temp file.
+     * Prefers the extension from `originalName` only if it's short and
+     * fully alphanumeric (defends against something like `".2026 08:30"`
+     * sneaking in). Falls back to a sensible default per file type.
+     */
+    private fun extensionFor(vaultFile: VaultFile): String {
+        val fromName = vaultFile.originalName.substringAfterLast('.', missingDelimiterValue = "")
+        if (fromName.isNotEmpty() && fromName.length <= 5 && fromName.all { it.isLetterOrDigit() }) {
+            return ".$fromName"
+        }
+        return when (vaultFile.fileType) {
+            VaultFileType.PHOTO -> ".jpg"
+            VaultFileType.VIDEO -> ".mp4"
+            VaultFileType.AUDIO -> ".m4a"
+            else -> ""
+        }
     }
 
     /**
