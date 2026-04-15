@@ -327,6 +327,16 @@ class FileEncryptionService @Inject constructor(
                     }
                 }
             }
+            // CipherOutputStream.close() above has just called
+            // cipher.doFinal() and written the 16-byte GCM auth tag to
+            // `fos`. Flush + fsync so the tag is durable on disk before
+            // we return. Without this, if the service is reaped right
+            // after stopForeground (Android 14+ reaps fast on low-memory
+            // devices), the tag can sit in the page cache and the file
+            // on disk is truncated — decrypt then produces garbage plain-
+            // text and MediaPlayer.prepare() fails with status=0x1.
+            fos.flush()
+            runCatching { fos.fd.sync() }
         }
         return totalRead
     }
