@@ -235,6 +235,22 @@ class RecorderService : LifecycleService() {
             it.parentFile?.mkdirs()
         }
 
+        // Round 4 Feature C: write a recovery marker BEFORE we hit any
+        // MediaRecorder/CameraX code that can fail. If we're reaped
+        // before the first frame lands on disk the marker is still
+        // there; RecordingRecovery on next startup will see the
+        // .in_progress_<id> sidecar, notice the plaintext is too small,
+        // and clean up. If recording succeeds, the marker is deleted
+        // from persistRecordingToVault's success path.
+        RecordingRecovery.writeMarker(
+            recordingsDir = File(filesDir, "recordings"),
+            id = recordingId!!,
+            type = type,
+            facing = facing ?: CameraFacing.BACK,
+            startTimeMs = System.currentTimeMillis(),
+            outputPath = outputFile!!.absolutePath,
+        )
+
         if (type == RecordingType.VIDEO) {
             startVideoRecording(facing ?: CameraFacing.BACK)
         } else {
@@ -507,6 +523,9 @@ class RecorderService : LifecycleService() {
                 "zero-byte/tiny recording skipped type=$type size=$plaintextSize path=${source.absolutePath}"
             )
             runCatching { source.delete() }
+            // Feature C: skip path still counts as "done" — drop the
+            // marker so RecordingRecovery doesn't later re-surface it.
+            RecordingRecovery.deleteMarker(File(filesDir, "recordings"), id)
             return Recording(
                 id = id,
                 title = "$title (empty)",
@@ -529,6 +548,9 @@ class RecorderService : LifecycleService() {
             )
             vaultRepository.saveFile(vaultFile)
             runCatching { source.delete() }
+            // Round 4 Feature C: clean marker on success so the next
+            // scanAndRecover run doesn't try to re-finalize this one.
+            RecordingRecovery.deleteMarker(File(filesDir, "recordings"), id)
             Recording(
                 id = id,
                 title = title,
