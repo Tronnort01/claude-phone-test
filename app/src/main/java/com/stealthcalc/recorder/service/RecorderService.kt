@@ -64,6 +64,13 @@ class RecorderService : LifecycleService() {
         private const val NOTIFICATION_ID = 9001
         private const val CHANNEL_ID = "calc_channel"
 
+        // MediaRecorder/CameraX occasionally hand back a file that's been
+        // opened but never written to — happens when start() fails silently
+        // or the process is killed in the ~100ms window before the first
+        // frame lands. Anything smaller than an empty MP4/M4A container
+        // header (~1 KB) is not decodeable; guard in persistRecordingToVault.
+        private const val MIN_VALID_RECORDING_BYTES = 1024L
+
         // Shared state for UI to observe
         private val _isRecording = MutableStateFlow(false)
         val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
@@ -487,6 +494,31 @@ class RecorderService : LifecycleService() {
         val mimeType = if (type == RecordingType.VIDEO) "video/mp4" else "audio/mp4"
         val vaultType = if (type == RecordingType.VIDEO) VaultFileType.VIDEO else VaultFileType.AUDIO
         val plaintextSize = source.length()
+
+        // Guard: if MediaRecorder.start() or CameraX setup failed silently
+        // and we're handed a 0-byte (or suspiciously tiny) plaintext, don't
+        // waste cycles encrypting garbage that'll never decode. Log + delete
+        // so the user gets an empty list row instead of a vault file that
+        // explodes in the viewer with `Prepare failed: status=0x1`.
+        if (plaintextSize < MIN_VALID_RECORDING_BYTES) {
+            AppLogger.log(
+                applicationContext,
+                "recorder",
+                "zero-byte/tiny recording skipped type=$type size=$plaintextSize path=${source.absolutePath}"
+            )
+            runCatching { source.delete() }
+            return Recording(
+                id = id,
+                title = "$title (empty)",
+                encryptedFilePath = source.absolutePath,
+                type = type,
+                durationMs = duration,
+                fileSizeBytes = plaintextSize,
+                format = ext,
+                cameraFacing = if (type == RecordingType.VIDEO) facing else null,
+                vaultFileId = null,
+            )
+        }
 
         return try {
             val vaultFile = encryptionService.encryptLocalFile(
