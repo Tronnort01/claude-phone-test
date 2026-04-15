@@ -104,7 +104,11 @@ fun VaultFileViewerScreen(
                     }
                 },
                 actions = {
-                    if (currentFile?.fileType == VaultFileType.PHOTO) {
+                    // Capture into a local val so we can null-check without
+                    // hitting the "smart cast impossible on a delegated
+                    // property" Kotlin compiler error.
+                    val cf = currentFile
+                    if (cf != null && cf.fileType == VaultFileType.PHOTO) {
                         Box {
                             IconButton(onClick = { showOverflow = true }) {
                                 Icon(
@@ -121,7 +125,7 @@ fun VaultFileViewerScreen(
                                     text = { Text("Merge with another photo") },
                                     onClick = {
                                         showOverflow = false
-                                        onMergePhoto(currentFile.id)
+                                        onMergePhoto(cf.id)
                                     },
                                 )
                             }
