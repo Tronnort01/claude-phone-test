@@ -539,6 +539,18 @@ class RecorderService : LifecycleService() {
             )
         }
 
+        // Round 5: container + MediaMetadataRetriever sanity check on the
+        // PLAINTEXT recorder output before we encrypt. This catches:
+        //   - CameraX produced a file with no ftyp box (very rare but
+        //     non-zero on some OEMs when the moov atom write fails)
+        //   - MediaMetadataRetriever can't find any tracks (= the moov
+        //     never made it to disk; downstream decoders will reject)
+        // We don't bail — we still attempt the encrypt + save so the
+        // user has SOMETHING in the vault — but the diagnostic is now
+        // in app.txt, which is exactly what we need to root-cause the
+        // "video saved but won't play" reports.
+        validateAndLogRecording(source, type, plaintextSize, id)
+
         return try {
             val vaultFile = encryptionService.encryptLocalFile(
                 source = source,
@@ -584,6 +596,76 @@ class RecorderService : LifecycleService() {
             mediaRecorder?.release()
         } catch (_: Exception) { }
         mediaRecorder = null
+    }
+
+    /**
+     * Round 5 diagnostic: peek at the just-finished plaintext recording
+     * before we encrypt it, and log everything ExoPlayer / MediaPlayer
+     * cares about so app.txt can root-cause "video saved but won't play"
+     * reports. Cheap (one short read + one MediaMetadataRetriever call)
+     * and never throws — safe to run on the IO dispatcher right before
+     * the encrypt path.
+     */
+    private fun validateAndLogRecording(
+        source: File,
+        type: RecordingType,
+        plaintextSize: Long,
+        id: String,
+    ) {
+        // Read the first 12 bytes — for any modern MP4/M4A produced by
+        // CameraX or MediaRecorder, bytes 4..7 are the ASCII string
+        // "ftyp" (the file type box). Anything else means the moov atom
+        // was never finalized and ExoPlayer will reject the file.
+        val header = ByteArray(12)
+        val readBytes = runCatching {
+            java.io.FileInputStream(source).use { fis -> fis.read(header) }
+        }.getOrDefault(-1)
+        val ftypTag = if (readBytes >= 8) {
+            String(header, 4, 4, Charsets.US_ASCII)
+        } else {
+            "<read failed>"
+        }
+        val ftypOk = ftypTag == "ftyp"
+
+        // MediaMetadataRetriever opens the file and attempts to parse
+        // its tracks. If duration/width/height are all null, the file is
+        // structurally broken regardless of how many bytes are on disk.
+        var retrieverOk = false
+        var detectedDurationMs: Long? = null
+        var detectedWidth: Int? = null
+        var detectedHeight: Int? = null
+        var detectedMime: String? = null
+        runCatching {
+            val r = android.media.MediaMetadataRetriever()
+            try {
+                r.setDataSource(source.absolutePath)
+                detectedDurationMs = r.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
+                )?.toLongOrNull()
+                detectedWidth = r.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+                )?.toIntOrNull()
+                detectedHeight = r.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+                )?.toIntOrNull()
+                detectedMime = r.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_MIMETYPE
+                )
+                retrieverOk = detectedDurationMs != null
+            } finally {
+                r.release()
+            }
+        }
+
+        AppLogger.log(
+            applicationContext,
+            "recorder",
+            "recording sanity id=$id type=$type size=$plaintextSize " +
+                "ftyp='$ftypTag' ftypOk=$ftypOk " +
+                "retrieverOk=$retrieverOk durMs=$detectedDurationMs " +
+                "wxh=${detectedWidth}x${detectedHeight} mime=$detectedMime " +
+                "path=${source.absolutePath}"
+        )
     }
 
     private fun createNotification(): Notification {

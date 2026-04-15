@@ -461,30 +461,37 @@ class FileEncryptionService @Inject constructor(
         val cipher = Cipher.getInstance(AES_GCM)
         cipher.init(Cipher.ENCRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
 
+        // CipherOutputStream.close() flushes + closes the underlying
+        // FileOutputStream as part of its contract. That meant the
+        // previous version's `fos.flush() + fos.fd.sync()` AFTER the
+        // inner use{} block ran on an already-closed fd — flush was a
+        // no-op and fd.sync() threw IOException (silently swallowed by
+        // runCatching), so the GCM tag never reached disk on a fast
+        // service reap. Round 5: drive the cipher manually with
+        // update/doFinal so we keep fos open through the explicit flush
+        // + fsync, then close it ourselves.
         var totalRead = 0L
-        FileOutputStream(outputFile).use { fos ->
-            // Write IV first
+        val fos = FileOutputStream(outputFile)
+        try {
             fos.write(iv)
-            CipherOutputStream(fos, cipher).use { cos ->
-                val buffer = ByteArray(8192)
-                input.use { ins ->
-                    var read: Int
-                    while (ins.read(buffer).also { read = it } != -1) {
-                        cos.write(buffer, 0, read)
-                        totalRead += read
-                    }
+            val buffer = ByteArray(8192)
+            input.use { ins ->
+                var read: Int
+                while (ins.read(buffer).also { read = it } != -1) {
+                    val out = cipher.update(buffer, 0, read)
+                    if (out != null && out.isNotEmpty()) fos.write(out)
+                    totalRead += read
                 }
             }
-            // CipherOutputStream.close() above has just called
-            // cipher.doFinal() and written the 16-byte GCM auth tag to
-            // `fos`. Flush + fsync so the tag is durable on disk before
-            // we return. Without this, if the service is reaped right
-            // after stopForeground (Android 14+ reaps fast on low-memory
-            // devices), the tag can sit in the page cache and the file
-            // on disk is truncated — decrypt then produces garbage plain-
-            // text and MediaPlayer.prepare() fails with status=0x1.
+            // doFinal() returns any final ciphertext + the 16-byte GCM
+            // auth tag. Write it before fsync so the whole encrypted
+            // blob is durable on disk by the time we return.
+            val tail = cipher.doFinal()
+            if (tail.isNotEmpty()) fos.write(tail)
             fos.flush()
             runCatching { fos.fd.sync() }
+        } finally {
+            runCatching { fos.close() }
         }
         return totalRead
     }

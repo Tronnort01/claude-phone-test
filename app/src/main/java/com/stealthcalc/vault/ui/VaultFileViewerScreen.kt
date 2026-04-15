@@ -257,26 +257,25 @@ private fun VideoPlayer(tempFile: File) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var videoError by remember(tempFile.absolutePath) { mutableStateOf<String?>(null) }
     var isBuffering by remember(tempFile.absolutePath) { mutableStateOf(true) }
+    var hasEverBeenReady by remember(tempFile.absolutePath) { mutableStateOf(false) }
 
-    // Build the ExoPlayer once per tempFile; release it on dispose. Unlike
-    // VideoView, ExoPlayer exposes Player.STATE_BUFFERING / READY / ENDED via
-    // Player.Listener so we can show a real loading spinner instead of a
-    // blank black surface while MediaPlayer.prepare() runs in the background
-    // (which was the "spins forever" symptom users hit through Round 4).
+    // Build ExoPlayer + attach listener BEFORE calling prepare() so we
+    // never miss an early STATE_READY / STATE_BUFFERING / onPlayerError
+    // that fires synchronously from prepare(). Previously we built the
+    // player and called prepare() inside remember{}, then attached the
+    // listener in DisposableEffect — which is a separate compose phase
+    // running AFTER the body, so any prepare-time error was lost and the
+    // UI was stuck on the initial isBuffering=true forever.
     val exoPlayer = remember(tempFile.absolutePath) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(tempFile)))
-            playWhenReady = true
-            prepare()
-        }
+        ExoPlayer.Builder(context).build()
     }
 
-    DisposableEffect(exoPlayer) {
+    DisposableEffect(exoPlayer, tempFile.absolutePath) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING
+                if (playbackState == Player.STATE_READY) hasEverBeenReady = true
                 if (playbackState == Player.STATE_ENDED) {
-                    // Snap back to start so a tap on play replays.
                     exoPlayer.seekTo(0)
                     exoPlayer.playWhenReady = false
                 }
@@ -289,22 +288,45 @@ private fun VideoPlayer(tempFile: File) {
                     "vault",
                     "VideoPlayer ExoPlayer error code=${error.errorCode} " +
                         "name=${error.errorCodeName} msg=${error.message} " +
+                        "cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message} " +
                         "file=${tempFile.absolutePath} exists=${tempFile.exists()} " +
                         "size=${if (tempFile.exists()) tempFile.length() else -1L}"
                 )
-                videoError = error.errorCodeName
+                videoError = "${error.errorCodeName} (${error.errorCode})"
             }
         }
         exoPlayer.addListener(listener)
+        // Now safe to feed media + prepare — listener is attached, so any
+        // synchronous error or state change will be observed.
+        exoPlayer.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(tempFile)))
+        exoPlayer.playWhenReady = true
+        exoPlayer.prepare()
         onDispose {
             exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }
 
-    // Pause when the host lifecycle stops (e.g. user pages away or
-    // backgrounds the activity) so a stale player doesn't keep the audio
-    // track running.
+    // Safety net: if the player never reaches STATE_READY within 12s and
+    // hasn't fired an explicit error, surface a timeout error so the user
+    // doesn't see an infinite spinner. This is a backstop for the older
+    // "spins forever" symptom that arose when ExoPlayer silently stalled
+    // on a malformed file without ever calling onPlayerError.
+    LaunchedEffect(tempFile.absolutePath) {
+        kotlinx.coroutines.delay(12_000)
+        if (!hasEverBeenReady && videoError == null) {
+            AppLogger.log(
+                context,
+                "vault",
+                "VideoPlayer 12s timeout no STATE_READY no error " +
+                    "file=${tempFile.absolutePath} " +
+                    "size=${if (tempFile.exists()) tempFile.length() else -1L}"
+            )
+            videoError = "Timed out preparing video"
+            isBuffering = false
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP && exoPlayer.isPlaying) {
@@ -327,6 +349,12 @@ private fun VideoPlayer(tempFile: File) {
                 "Video can't be played.",
                 color = Color.White,
                 style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                videoError ?: "Unknown error",
+                color = Color.White.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.bodySmall,
             )
             Spacer(Modifier.height(8.dp))
             Text(
