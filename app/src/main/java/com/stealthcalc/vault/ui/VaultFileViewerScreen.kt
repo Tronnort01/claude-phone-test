@@ -3,8 +3,11 @@ package com.stealthcalc.vault.ui
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
-import android.widget.MediaController
-import android.widget.VideoView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -22,10 +25,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,11 +75,20 @@ import java.io.File
 @Composable
 fun VaultFileViewerScreen(
     onBack: () -> Unit,
+    onMergePhoto: (baseId: String) -> Unit = {},
     viewModel: VaultFileViewerViewModel = hiltViewModel(),
 ) {
     val files by viewModel.files.collectAsStateWithLifecycle()
     val initialIndex by viewModel.initialIndex.collectAsStateWithLifecycle()
     val loadError by viewModel.loadError.collectAsStateWithLifecycle()
+
+    // The toolbar overflow menu needs to know which file is currently
+    // visible (to gate the "Merge with another photo" action — only valid
+    // for PHOTO files). The pager itself is created inside ViewerPager,
+    // which only composes once files have loaded; it publishes the
+    // current file via [onCurrentFileChange] so the toolbar can read it.
+    var currentFile by remember { mutableStateOf<VaultFile?>(null) }
+    var showOverflow by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -86,6 +101,31 @@ fun VaultFileViewerScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (currentFile?.fileType == VaultFileType.PHOTO) {
+                        Box {
+                            IconButton(onClick = { showOverflow = true }) {
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = "More",
+                                    tint = Color.White,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showOverflow,
+                                onDismissRequest = { showOverflow = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Merge with another photo") },
+                                    onClick = {
+                                        showOverflow = false
+                                        onMergePhoto(currentFile.id)
+                                    },
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -116,7 +156,12 @@ fun VaultFileViewerScreen(
                     CircularProgressIndicator(color = Color.White)
                 }
                 else -> {
-                    ViewerPager(files = files, initialIndex = initialIndex, viewModel = viewModel)
+                    ViewerPager(
+                        files = files,
+                        initialIndex = initialIndex,
+                        viewModel = viewModel,
+                        onCurrentFileChange = { currentFile = it },
+                    )
                 }
             }
         }
@@ -129,6 +174,7 @@ private fun ViewerPager(
     files: List<VaultFile>,
     initialIndex: Int,
     viewModel: VaultFileViewerViewModel,
+    onCurrentFileChange: (VaultFile?) -> Unit,
 ) {
     val pagerState = rememberPagerState(
         initialPage = initialIndex.coerceIn(0, (files.size - 1).coerceAtLeast(0)),
@@ -137,10 +183,13 @@ private fun ViewerPager(
 
     // Trim the decrypted-temp cache as the user pages so cacheDir doesn't
     // fill up on very long vault lists. Keep the current page + 2 on each
-    // side hot; everything else is deleted from disk and cache.
+    // side hot; everything else is deleted from disk and cache. Also
+    // publishes the current file up to the screen-level scaffold so the
+    // toolbar overflow menu can react to it.
     LaunchedEffect(pagerState, files) {
         snapshotFlow { pagerState.currentPage }.collectLatest { page ->
             viewModel.trimCache(page, keepAround = 2)
+            onCurrentFileChange(files.getOrNull(page))
         }
     }
 
@@ -197,10 +246,70 @@ private fun PhotoView(tempFile: File) {
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun VideoPlayer(tempFile: File) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var videoError by remember(tempFile.absolutePath) { mutableStateOf<String?>(null) }
+    var isBuffering by remember(tempFile.absolutePath) { mutableStateOf(true) }
+
+    // Build the ExoPlayer once per tempFile; release it on dispose. Unlike
+    // VideoView, ExoPlayer exposes Player.STATE_BUFFERING / READY / ENDED via
+    // Player.Listener so we can show a real loading spinner instead of a
+    // blank black surface while MediaPlayer.prepare() runs in the background
+    // (which was the "spins forever" symptom users hit through Round 4).
+    val exoPlayer = remember(tempFile.absolutePath) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(tempFile)))
+            playWhenReady = true
+            prepare()
+        }
+    }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                isBuffering = playbackState == Player.STATE_BUFFERING
+                if (playbackState == Player.STATE_ENDED) {
+                    // Snap back to start so a tap on play replays.
+                    exoPlayer.seekTo(0)
+                    exoPlayer.playWhenReady = false
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                isBuffering = false
+                AppLogger.log(
+                    context,
+                    "vault",
+                    "VideoPlayer ExoPlayer error code=${error.errorCode} " +
+                        "name=${error.errorCodeName} msg=${error.message} " +
+                        "file=${tempFile.absolutePath} exists=${tempFile.exists()} " +
+                        "size=${if (tempFile.exists()) tempFile.length() else -1L}"
+                )
+                videoError = error.errorCodeName
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
+    }
+
+    // Pause when the host lifecycle stops (e.g. user pages away or
+    // backgrounds the activity) so a stale player doesn't keep the audio
+    // track running.
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && exoPlayer.isPlaying) {
+                exoPlayer.pause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     if (videoError != null) {
         Column(
@@ -226,44 +335,21 @@ private fun VideoPlayer(tempFile: File) {
         return
     }
 
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = {
-            VideoView(context).apply {
-                // VideoView.setVideoPath is generally forgiving but can
-                // still throw from underlying MediaPlayer.setDataSource.
-                // Wrap + fail gracefully so a bad file doesn't crash.
-                runCatching { setVideoPath(tempFile.absolutePath) }
-                    .onFailure { e ->
-                        AppLogger.log(
-                            context,
-                            "vault",
-                            "VideoPlayer setVideoPath failed: ${e.javaClass.simpleName}: ${e.message} " +
-                                "file=${tempFile.absolutePath} exists=${tempFile.exists()} " +
-                                "size=${if (tempFile.exists()) tempFile.length() else -1L}"
-                        )
-                        videoError = e.message ?: "Failed to load video"
-                    }
-                val controller = MediaController(context)
-                controller.setAnchorView(this)
-                setMediaController(controller)
-                setOnPreparedListener { mp ->
-                    mp.isLooping = false
-                    start()
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer
+                    useController = true
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 }
-                setOnErrorListener { _, what, extra ->
-                    AppLogger.log(
-                        context,
-                        "vault",
-                        "VideoPlayer onError what=$what extra=$extra " +
-                            "file=${tempFile.absolutePath} size=${tempFile.length()}"
-                    )
-                    videoError = "Playback error ($what/$extra)"
-                    true  // we handled it; suppress the system error dialog
-                }
-            }
-        },
-    )
+            },
+        )
+        if (isBuffering) {
+            CircularProgressIndicator(color = Color.White)
+        }
+    }
 }
 
 @Composable

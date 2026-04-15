@@ -33,6 +33,12 @@ data class RecorderScreenState(
     val isRecording: Boolean = false,
     val elapsedMs: Long = 0,
     val showCoverScreen: Boolean = false,
+    /**
+     * Round 5: mirror of the user's "Use real device lock while recording"
+     * Settings preference. When true the UI suppresses the in-app cover
+     * and shows a hint to use the power button instead.
+     */
+    val useRealLockDuringRecording: Boolean = true,
 )
 
 @HiltViewModel
@@ -43,7 +49,14 @@ class RecorderViewModel @Inject constructor(
     private val overlayLockBus: OverlayLockBus,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(RecorderScreenState())
+    private val _state = MutableStateFlow(
+        RecorderScreenState(
+            useRealLockDuringRecording = prefs.getBoolean(
+                SettingsViewModel.KEY_USE_REAL_LOCK_DURING_RECORDING,
+                true,
+            ),
+        )
+    )
     val state: StateFlow<RecorderScreenState> = _state.asStateFlow()
 
     val recordings: StateFlow<List<Recording>> = repository.getAllRecordings()
@@ -53,7 +66,16 @@ class RecorderViewModel @Inject constructor(
         // Observe service state
         viewModelScope.launch {
             RecorderService.isRecording.collect { recording ->
-                _state.value = _state.value.copy(isRecording = recording)
+                _state.value = _state.value.copy(
+                    isRecording = recording,
+                    // Re-read the pref each time recording state flips so a
+                    // user toggling the Settings switch between recordings
+                    // takes effect immediately on the next start.
+                    useRealLockDuringRecording = prefs.getBoolean(
+                        SettingsViewModel.KEY_USE_REAL_LOCK_DURING_RECORDING,
+                        true,
+                    ),
+                )
             }
         }
         viewModelScope.launch {
@@ -91,7 +113,16 @@ class RecorderViewModel @Inject constructor(
             putExtra(RecorderService.EXTRA_CAMERA_FACING, s.selectedCamera.name)
         }
         appContext.startForegroundService(intent)
-        _state.value = _state.value.copy(showCoverScreen = true)
+        // Round 5: with the real-device-lock UX (default), we don't pop
+        // the in-app cover at all. The user stays on the recorder UI and
+        // power-locks the phone normally to hide it. Only show the cover
+        // when the user has explicitly opted into the legacy fake-lock
+        // behavior in Settings.
+        val showCover = !prefs.getBoolean(
+            SettingsViewModel.KEY_USE_REAL_LOCK_DURING_RECORDING,
+            true,
+        )
+        _state.value = _state.value.copy(showCoverScreen = showCover)
 
         // Safety net: if the service fails to enter the recording state
         // within a few seconds (e.g. a SecurityException on the
@@ -131,6 +162,12 @@ class RecorderViewModel @Inject constructor(
      */
     fun enterCoverScreen(secretPin: String) {
         if (!_state.value.isRecording) return
+        // Round 5: when the user has opted into the real-device-lock UX,
+        // suppress every cover screen entirely. They'll power-lock the
+        // phone normally; the foreground service + wake lock keep the
+        // recording running underneath the real Android keyguard. No
+        // fake cover is shown — that's the whole point of the design.
+        if (useRealLockDuringRecording()) return
         if (useOverlayLock()) {
             overlayLockBus.configure(secretPin)
             appContext.startService(
@@ -140,6 +177,19 @@ class RecorderViewModel @Inject constructor(
         } else {
             _state.value = _state.value.copy(showCoverScreen = true)
         }
+    }
+
+    /**
+     * Round 5: true when the user has opted into the new real-device-lock
+     * UX. Default is true, so unless they've explicitly turned it OFF in
+     * Settings → "Use real device lock while recording", we never show a
+     * cover.
+     */
+    private fun useRealLockDuringRecording(): Boolean {
+        return prefs.getBoolean(
+            SettingsViewModel.KEY_USE_REAL_LOCK_DURING_RECORDING,
+            true,
+        )
     }
 
     /**

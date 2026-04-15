@@ -608,7 +608,14 @@ class RecorderService : LifecycleService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Covert notification — looks like a calculator notification
+        // Covert notification — looks like a calculator notification.
+        // Round 5: setVisibility(SECRET) so the lock screen doesn't show
+        // the "Calculator / Calculation in progress..." text once the
+        // device is power-locked. With the new "Use real device lock
+        // while recording" UX, the user is going to land on the real
+        // keyguard and we don't want the notification to leak that
+        // anything is running. The notification shade after unlock still
+        // shows it, so the Done action remains reachable.
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Calculator")
             .setContentText("Calculation in progress...")
@@ -617,6 +624,7 @@ class RecorderService : LifecycleService() {
             .setSilent(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Done", stopPendingIntent)
             .build()
     }
@@ -629,6 +637,10 @@ class RecorderService : LifecycleService() {
         ).apply {
             description = "Calculator notifications"
             setShowBadge(false)
+            // Round 5: hide notification content from the lock screen so
+            // the device looks idle while recording. Pairs with the
+            // builder's VISIBILITY_SECRET above.
+            lockscreenVisibility = android.app.Notification.VISIBILITY_SECRET
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)

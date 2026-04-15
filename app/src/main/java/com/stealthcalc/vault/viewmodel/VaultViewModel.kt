@@ -74,6 +74,20 @@ class VaultViewModel @Inject constructor(
     private val _pendingDeleteRequest = MutableStateFlow<IntentSender?>(null)
     val pendingDeleteRequest: StateFlow<IntentSender?> = _pendingDeleteRequest.asStateFlow()
 
+    // Round 5: multi-select for the bulk-export and bulk-delete actions.
+    // VaultScreen enters selection mode on long-press of any card; subsequent
+    // taps toggle membership. Top app bar swaps to a contextual toolbar
+    // showing count + Export + Delete + Cancel while this set is non-empty.
+    private val _selectedFileIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedFileIds: StateFlow<Set<String>> = _selectedFileIds.asStateFlow()
+
+    // One-shot event consumed by the UI to show a snackbar after an export
+    // finishes. Null means no pending event (UI clears after showing).
+    private val _exportEvent = MutableStateFlow<ExportEvent?>(null)
+    val exportEvent: StateFlow<ExportEvent?> = _exportEvent.asStateFlow()
+
+    data class ExportEvent(val success: Int, val total: Int)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private val files = combine(_currentFolderId, _filter, _searchQuery, _sortOrder) { values ->
         @Suppress("UNCHECKED_CAST")
@@ -322,6 +336,65 @@ class VaultViewModel @Inject constructor(
     /** Called by the UI after the delete-confirmation launcher returns. */
     fun onDeleteRequestHandled() {
         _pendingDeleteRequest.value = null
+    }
+
+    // --- Selection / bulk export --------------------------------------------
+
+    fun toggleSelection(fileId: String) {
+        _selectedFileIds.update { current ->
+            if (fileId in current) current - fileId else current + fileId
+        }
+    }
+
+    fun clearSelection() {
+        _selectedFileIds.value = emptySet()
+    }
+
+    fun onExportEventHandled() {
+        _exportEvent.value = null
+    }
+
+    /**
+     * Decrypt every currently-selected vault file and write it to the public
+     * media library via MediaStore. Photos land in Pictures/StealthCalc,
+     * videos in Movies/StealthCalc, audio in Music/StealthCalc — they then
+     * appear in Google Photos / Gallery / Files.
+     *
+     * The export streams plaintext directly into the MediaStore-owned
+     * OutputStream, so no plaintext copy ever sits in cacheDir. Selection
+     * is cleared after the run; the UI is notified via [exportEvent].
+     */
+    fun exportSelected() {
+        val ids = _selectedFileIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = state.value.files.filter { it.id in ids }
+            var success = 0
+            for (file in current) {
+                val uri = encryptionService.exportToMediaStore(file)
+                if (uri != null) success++
+            }
+            _exportEvent.value = ExportEvent(success = success, total = current.size)
+            _selectedFileIds.value = emptySet()
+        }
+    }
+
+    /**
+     * Bulk delete every currently-selected vault file. Mirrors the existing
+     * single-file deleteFile() but loops over the selection. Vault payload +
+     * thumbnail are secure-deleted by VaultRepository.deleteFile; cascade to
+     * the linked Recording (if any) is handled there too.
+     */
+    fun deleteSelected() {
+        val ids = _selectedFileIds.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val current = state.value.files.filter { it.id in ids }
+            for (file in current) {
+                repository.deleteFile(file)
+            }
+            _selectedFileIds.value = emptySet()
+        }
     }
 
     fun saveImportedFile(file: VaultFile) {

@@ -1,11 +1,16 @@
 package com.stealthcalc.vault.service
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import com.stealthcalc.core.encryption.KeyStoreManager
+import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -13,6 +18,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.OutputStream
 import java.io.RandomAccessFile
 import java.security.SecureRandom
 import java.util.UUID
@@ -213,6 +219,147 @@ class FileEncryptionService @Inject constructor(
      */
     fun exportFile(vaultFile: VaultFile, outputFile: File) {
         decryptFile(File(vaultFile.encryptedPath), outputFile)
+    }
+
+    /**
+     * Decrypt a vault file straight into the device's public media library
+     * (Pictures/StealthCalc, Movies/StealthCalc, Music/StealthCalc) via
+     * MediaStore so it appears in Google Photos / Gallery / Files apps.
+     *
+     * Uses MediaStore.insert + openOutputStream which is the only
+     * scoped-storage-safe write path on API 29+ — no WRITE_EXTERNAL_STORAGE
+     * permission required because the URI returned by insert grants write
+     * access implicitly. On API 26-28 the manifest still declares
+     * WRITE_EXTERNAL_STORAGE (maxSdkVersion=28) so legacy storage works too.
+     *
+     * Returns the inserted MediaStore Uri on success, or null if the file
+     * type isn't a media type, the insert fails, or decryption throws. All
+     * failures are logged via AppLogger so they show up in the diagnostic
+     * crash log.
+     */
+    fun exportToMediaStore(vaultFile: VaultFile): Uri? {
+        val resolver = context.contentResolver
+        val (collectionUri, relativeDir, fallbackEnvDir) = when (vaultFile.fileType) {
+            VaultFileType.PHOTO -> Triple(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                "${Environment.DIRECTORY_PICTURES}/StealthCalc",
+                Environment.DIRECTORY_PICTURES,
+            )
+            VaultFileType.VIDEO -> Triple(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                "${Environment.DIRECTORY_MOVIES}/StealthCalc",
+                Environment.DIRECTORY_MOVIES,
+            )
+            VaultFileType.AUDIO -> Triple(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                "${Environment.DIRECTORY_MUSIC}/StealthCalc",
+                Environment.DIRECTORY_MUSIC,
+            )
+            else -> {
+                AppLogger.log(
+                    context, "vault",
+                    "exportToMediaStore: unsupported type ${vaultFile.fileType} for ${vaultFile.fileName}",
+                )
+                return null
+            }
+        }
+
+        val displayName = sanitizeExportName(vaultFile)
+        val mime = vaultFile.mimeType.ifBlank { defaultMimeFor(vaultFile.fileType) }
+
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+
+        val insertedUri = try {
+            resolver.insert(collectionUri, values)
+        } catch (e: Exception) {
+            AppLogger.log(
+                context, "vault",
+                "exportToMediaStore insert failed: ${e.javaClass.simpleName}: ${e.message} " +
+                    "name=$displayName type=${vaultFile.fileType}",
+            )
+            null
+        } ?: return null
+
+        // Stream the decrypted bytes into the MediaStore-owned Uri. Wrap in
+        // try/catch so a failed write triggers a delete of the half-written
+        // pending row instead of leaving an orphan in the gallery.
+        try {
+            resolver.openOutputStream(insertedUri)?.use { out ->
+                decryptToOutputStream(File(vaultFile.encryptedPath), out)
+            } ?: throw IllegalStateException("openOutputStream returned null for $insertedUri")
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val updateValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }
+                resolver.update(insertedUri, updateValues, null, null)
+            }
+            return insertedUri
+        } catch (e: Exception) {
+            AppLogger.log(
+                context, "vault",
+                "exportToMediaStore write failed: ${e.javaClass.simpleName}: ${e.message} " +
+                    "name=$displayName uri=$insertedUri",
+            )
+            // Best-effort cleanup of the pending row so the gallery doesn't
+            // show a 0-byte file. Wrapped because if the row is already gone
+            // the second delete is harmless.
+            runCatching { resolver.delete(insertedUri, null, null) }
+            return null
+        }
+    }
+
+    /**
+     * MediaStore display names need to be filesystem-safe (no slashes,
+     * colons, etc.). Recorder-produced files have titles like
+     * "Video Apr 14, 2026 08:30.mp4" — strip risky chars and ensure the
+     * file has a sensible extension matching its mime type.
+     */
+    private fun sanitizeExportName(vaultFile: VaultFile): String {
+        val raw = vaultFile.fileName.ifBlank { vaultFile.originalName }
+        val stripped = raw
+            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { "stealthcalc_${vaultFile.id.take(8)}" }
+        val expected = extensionFor(vaultFile)
+        return if (expected.isNotEmpty() && !stripped.endsWith(expected, ignoreCase = true)) {
+            stripped.substringBeforeLast('.', stripped) + expected
+        } else {
+            stripped
+        }
+    }
+
+    private fun defaultMimeFor(type: VaultFileType): String = when (type) {
+        VaultFileType.PHOTO -> "image/jpeg"
+        VaultFileType.VIDEO -> "video/mp4"
+        VaultFileType.AUDIO -> "audio/mp4"
+        else -> "application/octet-stream"
+    }
+
+    /**
+     * Decrypt a vault `.enc` file straight into a caller-supplied
+     * OutputStream. Used by [exportToMediaStore] so we don't have to
+     * write a plaintext temp first (no plaintext on disk = no leak).
+     */
+    private fun decryptToOutputStream(encFile: File, out: OutputStream) {
+        val fis = FileInputStream(encFile)
+        val iv = ByteArray(IV_SIZE)
+        val readIv = fis.read(iv)
+        check(readIv == IV_SIZE) { "Truncated vault file: ${encFile.absolutePath}" }
+        val cipher = Cipher.getInstance(AES_GCM)
+        cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
+        CipherInputStream(fis, cipher).use { cis ->
+            cis.copyTo(out, 8192)
+        }
+        out.flush()
     }
 
     /**

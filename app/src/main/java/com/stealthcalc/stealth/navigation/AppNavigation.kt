@@ -28,6 +28,8 @@ import com.stealthcalc.settings.ui.SettingsScreen
 import com.stealthcalc.vault.data.VaultRepository
 import com.stealthcalc.vault.service.FileEncryptionService
 import com.stealthcalc.vault.ui.InAppMediaPickerScreen
+import com.stealthcalc.vault.ui.PhotoMergePickerScreen
+import com.stealthcalc.vault.ui.PhotoMergeScreen
 import com.stealthcalc.vault.ui.SecureCameraScreen
 import com.stealthcalc.vault.ui.VaultFileViewerScreen
 import com.stealthcalc.vault.ui.VaultScreen
@@ -63,6 +65,12 @@ sealed class AppScreen(val route: String) {
     }
     data object MediaPicker : AppScreen("media_picker/{tab}") {
         fun createRoute(tab: PickerTab) = "media_picker/${tab.name}"
+    }
+    data object PhotoMergePicker : AppScreen("photo_merge_pick/{baseId}") {
+        fun createRoute(baseId: String) = "photo_merge_pick/$baseId"
+    }
+    data object PhotoMerge : AppScreen("photo_merge/{baseId}/{overlayId}") {
+        fun createRoute(baseId: String, overlayId: String) = "photo_merge/$baseId/$overlayId"
     }
     data object Settings : AppScreen("settings")
 }
@@ -320,7 +328,51 @@ fun StealthNavGraph(
                 }
             )
         ) {
-            VaultFileViewerScreen(onBack = { navController.popBackStack() })
+            VaultFileViewerScreen(
+                onBack = { navController.popBackStack() },
+                onMergePhoto = { baseId ->
+                    navController.navigate(AppScreen.PhotoMergePicker.createRoute(baseId))
+                },
+            )
+        }
+
+        // Photo merge — step 1: pick a second photo from the vault.
+        composable(
+            route = AppScreen.PhotoMergePicker.route,
+            arguments = listOf(navArgument("baseId") { type = NavType.StringType }),
+        ) { entry ->
+            val baseId = entry.arguments?.getString("baseId").orEmpty()
+            PhotoMergePickerScreen(
+                onBack = { navController.popBackStack() },
+                onPick = { overlayId ->
+                    // Replace the picker on the back stack so Back from the
+                    // editor returns to the viewer rather than the picker.
+                    navController.navigate(AppScreen.PhotoMerge.createRoute(baseId, overlayId)) {
+                        popUpTo(AppScreen.PhotoMergePicker.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        // Photo merge — step 2: gesture editor + save.
+        composable(
+            route = AppScreen.PhotoMerge.route,
+            arguments = listOf(
+                navArgument("baseId") { type = NavType.StringType },
+                navArgument("overlayId") { type = NavType.StringType },
+            ),
+        ) {
+            PhotoMergeScreen(
+                onBack = { navController.popBackStack() },
+                // After save: pop all the way back to the vault grid so the
+                // user lands where the new "Merged_…" entry has appeared.
+                onSaved = {
+                    navController.popBackStack(
+                        route = AppScreen.Vault.route,
+                        inclusive = false,
+                    )
+                },
+            )
         }
 
         composable(AppScreen.SecureCamera.route) {

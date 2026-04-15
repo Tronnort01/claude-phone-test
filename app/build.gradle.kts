@@ -89,4 +89,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.video)
+
+    // Media3 (ExoPlayer) — replaces VideoView in the vault viewer. See
+    // docs/ISSUES_FOUND.md Round 5 / commit comments.
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.common)
 }

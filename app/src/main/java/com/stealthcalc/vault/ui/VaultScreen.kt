@@ -5,8 +5,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +37,9 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Folder
@@ -56,6 +61,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -89,7 +96,7 @@ import com.stealthcalc.vault.viewmodel.VaultViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun VaultScreen(
     onBack: () -> Unit,
@@ -100,10 +107,28 @@ fun VaultScreen(
     viewModel: VaultViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val selectedIds by viewModel.selectedFileIds.collectAsStateWithLifecycle()
+    val exportEvent by viewModel.exportEvent.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
     var showNewFolder by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<VaultFile?>(null) }
+    var bulkDeleteConfirm by remember { mutableStateOf(false) }
     var showImportOptions by remember { mutableStateOf(false) }
     var showSortPicker by remember { mutableStateOf(false) }
+    val isSelectionMode = selectedIds.isNotEmpty()
+
+    // Snackbar for export results.
+    LaunchedEffect(exportEvent) {
+        exportEvent?.let { evt ->
+            val msg = when {
+                evt.success == evt.total -> "Exported ${evt.success} file${if (evt.success == 1) "" else "s"} to your media library"
+                evt.success == 0 -> "Export failed. See Settings → Diagnostics → Export crash log."
+                else -> "Exported ${evt.success} of ${evt.total}. See diagnostics for failures."
+            }
+            snackbarHostState.showSnackbar(msg)
+            viewModel.onExportEventHandled()
+        }
+    }
 
     // Document picker — kept as-is for non-gallery imports. Photos and
     // videos go through the in-app MediaStore picker (see onPickPhotos /
@@ -134,84 +159,115 @@ fun VaultScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    if (state.isSearchActive) {
-                        OutlinedTextField(
-                            value = state.searchQuery,
-                            onValueChange = viewModel::onSearchQueryChanged,
-                            placeholder = { Text("Search vault...") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        Column {
-                            Text(if (state.currentFolderId != null) "Folder" else "Secure Vault")
-                            Text(
-                                "${state.fileCount} files • ${formatSize(state.totalSize)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                            )
+            if (isSelectionMode) {
+                // Selection-mode toolbar: count + Export + Delete + Cancel.
+                TopAppBar(
+                    title = { Text("${selectedIds.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.clearSelection() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel selection")
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        when {
-                            state.isSearchActive -> viewModel.toggleSearch()
-                            state.currentFolderId != null -> viewModel.navigateUp()
-                            else -> onBack()
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.exportSelected() }) {
+                            Icon(Icons.Default.FileDownload, contentDescription = "Export to library")
                         }
-                    }) {
-                        Icon(
-                            if (state.isSearchActive) Icons.Default.Close
-                            else Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                actions = {
-                    if (!state.isSearchActive) {
-                        IconButton(onClick = viewModel::toggleSearch) {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        IconButton(onClick = { bulkDeleteConfirm = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }
-                        IconButton(onClick = { showSortPicker = true }) {
-                            Icon(Icons.Default.SortByAlpha, contentDescription = "Sort")
-                        }
-                        IconButton(onClick = viewModel::toggleGridView) {
-                            Icon(
-                                if (state.isGridView) Icons.Default.ViewList else Icons.Default.GridView,
-                                contentDescription = "Toggle view"
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
                 )
-            )
+            } else {
+                TopAppBar(
+                    title = {
+                        if (state.isSearchActive) {
+                            OutlinedTextField(
+                                value = state.searchQuery,
+                                onValueChange = viewModel::onSearchQueryChanged,
+                                placeholder = { Text("Search vault...") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Column {
+                                Text(if (state.currentFolderId != null) "Folder" else "Secure Vault")
+                                Text(
+                                    "${state.fileCount} files • ${formatSize(state.totalSize)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            when {
+                                state.isSearchActive -> viewModel.toggleSearch()
+                                state.currentFolderId != null -> viewModel.navigateUp()
+                                else -> onBack()
+                            }
+                        }) {
+                            Icon(
+                                if (state.isSearchActive) Icons.Default.Close
+                                else Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
+                    actions = {
+                        if (!state.isSearchActive) {
+                            IconButton(onClick = viewModel::toggleSearch) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                            IconButton(onClick = { showSortPicker = true }) {
+                                Icon(Icons.Default.SortByAlpha, contentDescription = "Sort")
+                            }
+                            IconButton(onClick = viewModel::toggleGridView) {
+                                Icon(
+                                    if (state.isGridView) Icons.Default.ViewList else Icons.Default.GridView,
+                                    contentDescription = "Toggle view"
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    )
+                )
+            }
         },
         floatingActionButton = {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Camera FAB
-                FloatingActionButton(
-                    onClick = onOpenCamera,
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(48.dp)
+            // Hide FAB stack during selection mode so users focus on the
+            // contextual export / delete actions in the toolbar.
+            if (!isSelectionMode) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = "Secure Camera")
-                }
-                // Import FAB
-                FloatingActionButton(
-                    onClick = { showImportOptions = true },
-                    containerColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Import")
+                    // Camera FAB
+                    FloatingActionButton(
+                        onClick = onOpenCamera,
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Secure Camera")
+                    }
+                    // Import FAB
+                    FloatingActionButton(
+                        onClick = { showImportOptions = true },
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Import")
+                    }
                 }
             }
         }
@@ -301,9 +357,15 @@ fun VaultScreen(
                     }
                     // Then files
                     items(state.files, key = { it.id }) { file ->
+                        val isSelected = file.id in selectedIds
                         VaultFileCard(
                             file = file,
-                            onClick = { onOpenFile(file) },
+                            isSelected = isSelected,
+                            onClick = {
+                                if (isSelectionMode) viewModel.toggleSelection(file.id)
+                                else onOpenFile(file)
+                            },
+                            onLongClick = { viewModel.toggleSelection(file.id) },
                             onToggleFavorite = { viewModel.toggleFavorite(file.id) },
                             onDelete = { deleteTarget = file },
                             isGrid = state.isGridView,
@@ -430,12 +492,33 @@ fun VaultScreen(
             }
         )
     }
+
+    // Bulk delete confirmation (selection-mode action).
+    if (bulkDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { bulkDeleteConfirm = false },
+            title = { Text("Delete ${selectedIds.size} file${if (selectedIds.size == 1) "" else "s"}?") },
+            text = { Text("These will be permanently removed from the vault. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteSelected()
+                    bulkDeleteConfirm = false
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { bulkDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VaultFileCard(
     file: VaultFile,
+    isSelected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onDelete: () -> Unit,
     isGrid: Boolean,
@@ -457,8 +540,19 @@ private fun VaultFileCard(
         VaultFileType.OTHER -> Color(0xFF607D8B)
     }
 
+    val cardModifier = if (isSelected) {
+        Modifier.border(
+            width = 3.dp,
+            color = MaterialTheme.colorScheme.primary,
+            shape = RoundedCornerShape(8.dp),
+        )
+    } else Modifier
+
     Card(
-        onClick = onClick,
+        modifier = cardModifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        ),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
@@ -532,6 +626,24 @@ private fun VaultFileCard(
                             .align(Alignment.TopEnd)
                             .padding(4.dp)
                             .size(16.dp)
+                    )
+                }
+
+                // Selection indicator (multi-select / export-mode visual).
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                    )
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp)
+                            .size(28.dp)
                     )
                 }
             }

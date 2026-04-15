@@ -42,6 +42,15 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Round 5: vault export. On API 29+ MediaStore.insert grants write
+         access implicitly via the returned URI, but on API 26-28 (legacy
+         storage) writing into Pictures/StealthCalc still requires the
+         classic write permission. Capped at 28 so it doesn't show up in
+         the install dialog on modern devices. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:name=".StealthCalcApp"
         android:label="Calculator"

@@ -21,6 +21,12 @@ data class SettingsState(
     val isBiometricEnabled: Boolean = false,
     val isDecoyEnabled: Boolean = false,
     val isOverlayLockEnabled: Boolean = false,
+    // Round 5: when true, recording does NOT show a fake-lock cover. The
+    // user power-locks the phone normally; the foreground service + wake
+    // lock keep the recording running; unlocking with their real PIN /
+    // biometric returns to the calculator. Default true — the new
+    // recommended UX.
+    val useRealLockDuringRecording: Boolean = true,
     // Change code
     val showChangeCodeDialog: Boolean = false,
     val changeCodeError: String? = null,
@@ -45,6 +51,10 @@ class SettingsViewModel @Inject constructor(
         // overlay. The row only takes effect if Settings.canDrawOverlays
         // is true; the Settings UI walks the user through granting.
         const val KEY_OVERLAY_LOCK_ENABLED = "overlay_lock_enabled"
+        // Round 5: drives MainActivity.setShowWhenLocked + the recorder's
+        // cover-screen choice. True (default) = real device lock; false =
+        // legacy fake-lock cover.
+        const val KEY_USE_REAL_LOCK_DURING_RECORDING = "use_real_lock_during_recording"
     }
 
     private val _state = MutableStateFlow(
@@ -56,6 +66,7 @@ class SettingsViewModel @Inject constructor(
             isBiometricEnabled = biometricHelper.isBiometricEnabled,
             isDecoyEnabled = secretCodeManager.isDecoyEnabled,
             isOverlayLockEnabled = prefs.getBoolean(KEY_OVERLAY_LOCK_ENABLED, false),
+            useRealLockDuringRecording = prefs.getBoolean(KEY_USE_REAL_LOCK_DURING_RECORDING, true),
         )
     )
     val state: StateFlow<SettingsState> = _state.asStateFlow()
@@ -63,6 +74,11 @@ class SettingsViewModel @Inject constructor(
     fun setOverlayLockEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_OVERLAY_LOCK_ENABLED, enabled).apply()
         _state.update { it.copy(isOverlayLockEnabled = enabled) }
+    }
+
+    fun setUseRealLockDuringRecording(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_USE_REAL_LOCK_DURING_RECORDING, enabled).apply()
+        _state.update { it.copy(useRealLockDuringRecording = enabled) }
     }
 
     val autoLockOptions = listOf(

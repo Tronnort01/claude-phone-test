@@ -170,6 +170,24 @@ fun SettingsScreen(
                 }
             )
 
+            // Round 5: real device lock during recording. When ON, no fake
+            // cover is shown — the user power-locks the phone normally and
+            // the foreground service keeps the recording running. They
+            // unlock with their REAL Android PIN/biometric. Trade-off: the
+            // calculator is the first thing visible after unlock, no
+            // covert layer in between.
+            SettingsToggle(
+                title = "Use real device lock while recording",
+                subtitle = if (state.useRealLockDuringRecording)
+                    "On — power-lock as normal; recording continues; unlock with your phone PIN"
+                else
+                    "Off — show the in-app fake lock cover when recording",
+                checked = state.useRealLockDuringRecording,
+                onToggle = {
+                    viewModel.setUseRealLockDuringRecording(!state.useRealLockDuringRecording)
+                }
+            )
+
             SettingsRow(
                 title = "Disable Battery Optimization",
                 subtitle = if (batteryExempt)
