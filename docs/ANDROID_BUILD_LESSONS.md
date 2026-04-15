@@ -321,6 +321,143 @@ Root-caused the media-playback bug from `0f9037b` and landed the user's Round 4 
 
 Ordering paid off again: N1 first (the user's blocking bug), then N2-N4 as defensive companions, then D/A/J/C/B smallest-to-biggest so any GitHub Actions regression is trivially bisectable. Each commit is exportable + testable in isolation.
 
+### 2026-04-15 session — Round 5 (commits `6eb39dc..33cd2d3`, branch `claude/fix-video-player-add-features-Pyk9Z`)
+
+The "video doesn't play" symptom that survived four prior rounds (N1 temp-filename, N2 fsync, N3 logging, N4 zero-byte guard) finally root-caused. The lesson tables below distill it into rules so the same trap doesn't get re-set.
+
+#### Conscrypt's AES-GCM is NOT streamable (single biggest surprise of the session)
+
+Android's default JCE provider is Conscrypt. Conscrypt's `AES/GCM/NoPadding` implementation buffers the ENTIRE ciphertext in an internal `ByteArrayOutputStream` until `cipher.doFinal()` is called — because GCM authentication needs to process all data before producing the 16-byte tag. This means **peak heap during encrypt and decrypt equals the file size**. A 446 MB recording crashes the process with `OutOfMemoryError` at the `ByteArrayOutputStream.grow()` doubling step, well before reaching the actual file size.
+
+Both `CipherOutputStream(fos, cipher)` (writes go into `cipher.update()` which buffers) and the manual `cipher.update(buffer)` pattern hit this — the entry point doesn't matter, the cipher buffers regardless. There is no flag to disable this buffering.
+
+**Stack trace for next-time pattern matching:**
+```
+java.lang.OutOfMemoryError: Failed to allocate a 268435472 byte allocation...
+  at java.io.ByteArrayOutputStream.grow(ByteArrayOutputStream.java:120)
+  at com.android.org.conscrypt.OpenSSLAeadCipher.appendToBuf(OpenSSLAeadCipher.java:313)
+  at com.android.org.conscrypt.OpenSSLAeadCipher.updateInternal(OpenSSLAeadCipher.java:321)
+  at javax.crypto.Cipher.update(Cipher.java:1741)
+```
+Anything matching this stack means "you tried to GCM-encrypt/decrypt a file too big to fit in heap."
+
+**Fix patterns** (pick one):
+| Approach | Trade-off |
+|---|---|
+| **AES-CTR + HMAC-SHA256 (encrypt-then-MAC)** | What we used. Standard AEAD construction. CTR is a true stream cipher — `update()` returns exactly the bytes you fed it. HMAC is computed in the same pass. Constant memory at any size. Format change required + backward-compat path for old GCM files. |
+| BouncyCastle's GCM | Streams correctly, but adds `org.bouncycastle:bcprov-jdk15to18` (~5 MB) and you must explicitly install the provider — Conscrypt is preferred by default. |
+| Tink's `StreamingAead` (`AesGcmHkdfStreaming`) | Streams in chunks transparently. Adds Tink (~2 MB) and a key-handle migration. Overkill if you don't already use Tink. |
+| Chunked GCM by hand (per-chunk IV+tag) | Streams, stays on Conscrypt, no new deps. But you invent a custom file format and each chunk pays a 16-byte tag overhead. |
+
+**File format we shipped** (`SC2v` magic so legacy GCM files are still readable):
+```
+[4 bytes magic "SC2v"]   ← detect at decrypt; if missing, run legacy GCM path
+[16 bytes random AES-CTR IV]
+[N bytes ciphertext = AES-256-CTR(plaintext)]
+[32 bytes HMAC-SHA256(magic || iv || ciphertext)]
+```
+Decrypt flow: open file, peek 4 bytes, dispatch to `decryptV2()` or `decryptLegacyGcm()`. Verify HMAC with `MessageDigest.isEqual(expected, computed)` (constant-time).
+
+**HMAC key**: don't reuse the AES key for HMAC. Derive a separate one. We used `SHA-256(aesKey || "stealthcalc-hmac-v2")` which is an adequate KDF when the AES key already has full Keystore entropy. Use HKDF if you don't have that guarantee.
+
+#### `CipherOutputStream.close()` closes the wrapped `FileOutputStream` (silent fsync no-op)
+
+Documented contract: "Closing this output stream causes this filter's output stream and the cipher to be closed." So this pattern is broken:
+```kotlin
+FileOutputStream(outputFile).use { fos ->
+    fos.write(iv)
+    CipherOutputStream(fos, cipher).use { cos ->
+        // ... write ciphertext ...
+    }  // ← this closes fos
+    fos.flush()       // ← no-op, fos is closed (Java FileOutputStream.flush doesn't throw, just does nothing)
+    fos.fd.sync()     // ← throws IOException("File is closed"), swallowed by runCatching
+}
+```
+Round 4 N2 added the flush+fsync to durably write the GCM tag before service reap. Because of this issue, the fsync NEVER happened. To fix, drive the cipher manually OR open `fos` separately and don't `use{}` it through the inner block. Round 5's V2 (CTR+HMAC) rewrite handles its own buffering and explicitly does `fos.flush() + fos.fd.sync()` before closing.
+
+#### Compose: ExoPlayer listener MUST be attached before `prepare()`
+
+Anti-pattern that wasted a debug round:
+```kotlin
+val exoPlayer = remember(file) {
+    ExoPlayer.Builder(ctx).build().apply {
+        setMediaItem(MediaItem.fromUri(uri))
+        prepare()  // ← starts; can fire onPlayerError or STATE_READY immediately
+    }
+}
+DisposableEffect(exoPlayer) {       // ← runs in post-composition effect phase, AFTER body
+    val l = object : Player.Listener { ... }
+    exoPlayer.addListener(l)         // ← too late; missed any synchronous event
+    onDispose { exoPlayer.removeListener(l); exoPlayer.release() }
+}
+```
+The DisposableEffect body runs as part of Compose's effect phase, AFTER the composition body. Anything `prepare()` fires synchronously (an immediate format error, or a fast STATE_READY for a small cached file) is gone before the listener attaches → UI stuck on initial state forever (`isBuffering = true` in our case).
+
+Correct pattern: build the bare player in `remember{}`, attach the listener in `DisposableEffect` AS THE FIRST THING, THEN call `setMediaItem` + `prepare()`:
+```kotlin
+val exoPlayer = remember(file) { ExoPlayer.Builder(ctx).build() }
+DisposableEffect(exoPlayer, file) {
+    val l = object : Player.Listener { ... }
+    exoPlayer.addListener(l)
+    exoPlayer.setMediaItem(MediaItem.fromUri(uri))
+    exoPlayer.prepare()
+    onDispose { exoPlayer.removeListener(l); exoPlayer.release() }
+}
+```
+Pair with a watchdog `LaunchedEffect` that times out after N seconds if `STATE_READY` never arrives — covers the case where the player silently stalls without ever firing `onPlayerError`. We used 12s.
+
+#### Diagnostic-first when chasing media bugs
+
+After three rounds of guessing at "video saved but won't play", the actual root cause was nailed in 5 minutes once we logged the recording's first 12 bytes (verify ASCII `ftyp` MP4 box) + `MediaMetadataRetriever` outputs (duration / w x h / mime) BEFORE encryption:
+```
+[recorder] recording sanity id=... type=VIDEO size=467799153
+  ftyp='ftyp' ftypOk=true retrieverOk=true durMs=309000
+  wxh=1280x720 mime=video/mp4 path=...
+```
+This single log line proved the MP4 was valid → the bug was downstream → the OOM stack trace pinpointed it within the encryption call. Always add this kind of "the file was X bytes, the system saw Y" log right at the boundary you're suspicious of.
+
+#### Compose `mutableStateOf` delegated property + smart cast
+
+Already in this doc but bit us again on a fresh path:
+```kotlin
+var currentFile by remember { mutableStateOf<VaultFile?>(null) }
+// ...
+if (currentFile?.fileType == VaultFileType.PHOTO) {
+    onMergePhoto(currentFile.id)   // ← Smart cast to 'VaultFile' is impossible, because 'currentFile' is a delegated property
+}
+```
+Always capture into a local `val` immediately after the null check or at the start of the conditional:
+```kotlin
+val cf = currentFile
+if (cf != null && cf.fileType == VaultFileType.PHOTO) {
+    onMergePhoto(cf.id)
+}
+```
+
+#### MediaStore export (vault → public library)
+
+For writing into Pictures/Movies/Music on API 29+:
+```kotlin
+val values = ContentValues().apply {
+    put(MediaStore.MediaColumns.DISPLAY_NAME, sanitizedName)
+    put(MediaStore.MediaColumns.MIME_TYPE, mime)
+    put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/StealthCalc")
+    put(MediaStore.MediaColumns.IS_PENDING, 1)  // hide while we write
+}
+val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
+resolver.openOutputStream(uri)!!.use { out -> /* write bytes */ }
+resolver.update(uri, ContentValues().apply { put(IS_PENDING, 0) }, null, null)
+```
+Sanitize `DISPLAY_NAME` — strip `\\/:*?"<>|` and runs of whitespace. Recorder titles like `"Video Apr 14, 2026 08:30.mp4"` (colons + commas) crash some gallery apps if you don't.
+
+API 26-28 still need `<uses-permission android:name="WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />` in the manifest. API 29+ inherits write access from the URI returned by `insert()` — no permission required.
+
+#### CameraX video FILES ARE FINE — don't blame the codec without proof
+
+Half this round's time was wasted suspecting CameraX's `Recorder` was producing malformed MP4s (fMP4 vs standard, missing moov atom, codec issues). It wasn't. The sanity-log proved `MediaMetadataRetriever` happily extracted duration / w x h / mime from a 446 MB file — the container was valid. The bug was in the encryption pipeline. Lesson: when a media file "won't play", verify the container BEFORE blaming the producer.
+
+---
+
 ### 2026-04-14 session — Round 3 (commits `a766fd0`..`ba15641`, branch `claude/fix-cloud-signin-video-bugs-cGptT`)
 
 - **Fix M — pinning toast (`a766fd0`):** removed `startLockTask`/`stopLockTask` from FakeLockScreen. System toast was un-suppressible; home-swipe dismiss is the accepted trade-off.
