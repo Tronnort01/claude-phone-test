@@ -142,7 +142,8 @@ class RecordingRecovery @Inject constructor(
 
         // First pass: finalize anything with a marker (we have full metadata).
         for (marker in markers) {
-            val meta = parseMarker(marker) ?: run {
+            val meta = parseMarker(marker)
+            if (meta == null) {
                 AppLogger.log(context, "recorder", "recovery: unparseable marker ${marker.name}")
                 runCatching { marker.delete() }
                 continue
