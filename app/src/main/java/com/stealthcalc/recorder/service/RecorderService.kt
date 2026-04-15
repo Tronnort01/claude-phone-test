@@ -573,6 +573,19 @@ class RecorderService : LifecycleService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // Stop action covers the residual "cover dismissed by home-swipe"
+        // case from Round 3: without startLockTask() a Pixel home-gesture
+        // can drop out of the fake lock; the recording keeps running via
+        // the foreground service but there's no on-screen stop button.
+        // The notification shade always works — pull down, tap Stop.
+        // Label is "Done" (not "Stop recording") to stay covert; pairs
+        // with the "Calculator / Calculation in progress..." text.
+        val stopPendingIntent = PendingIntent.getService(
+            this, 1,
+            Intent(this, RecorderService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         // Covert notification — looks like a calculator notification
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Calculator")
@@ -582,6 +595,7 @@ class RecorderService : LifecycleService() {
             .setSilent(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Done", stopPendingIntent)
             .build()
     }
 
