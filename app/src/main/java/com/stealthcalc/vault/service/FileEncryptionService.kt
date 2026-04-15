@@ -20,13 +20,15 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.RandomAccessFile
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
-import javax.crypto.CipherOutputStream
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,6 +49,31 @@ class FileEncryptionService @Inject constructor(
         private const val AES_GCM = "AES/GCM/NoPadding"
         private const val IV_SIZE = 12
         private const val TAG_SIZE = 128
+
+        // Round 5 HOTFIX (post-OOM): switch from AES/GCM (Conscrypt
+        // implementation buffers the ENTIRE ciphertext in memory until
+        // doFinal() — fatal on a 446 MB recording) to AES/CTR +
+        // HMAC-SHA256, which is a standard streaming AEAD construction.
+        // Both encryption and decryption now run in constant memory
+        // regardless of file size.
+        //
+        // File format v2:
+        //   [4 bytes magic "SC2v"]
+        //   [16 bytes random IV for AES-CTR]
+        //   [N bytes ciphertext = AES-256-CTR(plaintext)]
+        //   [32 bytes HMAC-SHA256(magic || iv || ciphertext)]
+        //
+        // Backward compat: decryptFile() peeks the first 4 bytes; if
+        // they don't match the magic, it falls back to the legacy GCM
+        // path (which still works for existing small files since
+        // they pre-date this OOM-prone scenario). New writes always
+        // use v2.
+        private const val AES_CTR = "AES/CTR/NoPadding"
+        private const val HMAC = "HmacSHA256"
+        private const val CTR_IV_SIZE = 16
+        private const val HMAC_TAG_SIZE = 32
+        private val V2_MAGIC = byteArrayOf(0x53, 0x43, 0x32, 0x76) // "SC2v"
+        private const val V2_HEADER_SIZE = 4 + CTR_IV_SIZE  // 20 bytes
     }
 
     private val vaultDir: File
@@ -142,16 +169,12 @@ class FileEncryptionService @Inject constructor(
         val file = File(path)
         if (!file.exists()) return null
         return try {
-            FileInputStream(file).use { fis ->
-                val iv = ByteArray(IV_SIZE)
-                if (fis.read(iv) != IV_SIZE) return null
-                val cipher = Cipher.getInstance(AES_GCM).apply {
-                    init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
-                }
-                CipherInputStream(fis, cipher).use { cis ->
-                    BitmapFactory.decodeStream(cis)
-                }
-            }
+            // Thumbnails are tiny (<<100 KB); decrypt to a ByteArray
+            // first then decode. Format-aware via decryptFileTo so both
+            // legacy GCM thumbs and new v2 thumbs work.
+            val baos = java.io.ByteArrayOutputStream(file.length().coerceAtMost(256 * 1024).toInt())
+            decryptFileTo(file, baos)
+            BitmapFactory.decodeByteArray(baos.toByteArray(), 0, baos.size())
         } catch (_: Exception) {
             null
         }
@@ -199,19 +222,35 @@ class FileEncryptionService @Inject constructor(
     }
 
     /**
-     * Decrypt a vault file and return an InputStream.
+     * Decrypt a vault file and return an InputStream the caller can
+     * consume in any way (e.g. to feed a third-party decoder). The
+     * stream is backed by an in-memory pipe filled by a worker thread
+     * that runs the format-aware decrypt in constant memory — so it
+     * works for huge v2 files without OOM.
+     *
+     * Caller MUST close the returned stream.
      */
     fun decryptToStream(vaultFile: VaultFile): InputStream {
         val encFile = File(vaultFile.encryptedPath)
-        val fis = FileInputStream(encFile)
-
-        // Read IV
-        val iv = ByteArray(IV_SIZE)
-        fis.read(iv)
-
-        val cipher = Cipher.getInstance(AES_GCM)
-        cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
-        return CipherInputStream(fis, cipher)
+        val pipeIn = java.io.PipedInputStream(64 * 1024)
+        val pipeOut = java.io.PipedOutputStream(pipeIn)
+        Thread({
+            try {
+                decryptFileTo(encFile, pipeOut)
+            } catch (e: Exception) {
+                AppLogger.log(
+                    context, "vault",
+                    "decryptToStream worker failed: ${e.javaClass.simpleName}: ${e.message} " +
+                        "id=${vaultFile.id} name=${vaultFile.fileName}"
+                )
+            } finally {
+                runCatching { pipeOut.close() }
+            }
+        }, "vault-decrypt-stream-${vaultFile.id.take(8)}").apply {
+            isDaemon = true
+            start()
+        }
+        return pipeIn
     }
 
     /**
@@ -348,17 +387,11 @@ class FileEncryptionService @Inject constructor(
      * Decrypt a vault `.enc` file straight into a caller-supplied
      * OutputStream. Used by [exportToMediaStore] so we don't have to
      * write a plaintext temp first (no plaintext on disk = no leak).
+     * Format-aware: routes through the v2 streaming path or legacy GCM
+     * via the shared [decryptFileTo] helper.
      */
     private fun decryptToOutputStream(encFile: File, out: OutputStream) {
-        val fis = FileInputStream(encFile)
-        val iv = ByteArray(IV_SIZE)
-        val readIv = fis.read(iv)
-        check(readIv == IV_SIZE) { "Truncated vault file: ${encFile.absolutePath}" }
-        val cipher = Cipher.getInstance(AES_GCM)
-        cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
-        CipherInputStream(fis, cipher).use { cis ->
-            cis.copyTo(out, 8192)
-        }
+        decryptFileTo(encFile, out)
         out.flush()
     }
 
@@ -454,40 +487,59 @@ class FileEncryptionService @Inject constructor(
 
     // --- Private helpers ---
 
+    /**
+     * v2 encryption: AES-256-CTR + HMAC-SHA256, streaming. Fixed-size
+     * heap regardless of source file size — survives multi-GB recordings
+     * where the previous AES-GCM path OOMed on Conscrypt.
+     */
     private fun encryptStream(input: InputStream, outputFile: File): Long {
-        val iv = ByteArray(IV_SIZE)
-        SecureRandom().nextBytes(iv)
+        val ivCtr = ByteArray(CTR_IV_SIZE)
+        SecureRandom().nextBytes(ivCtr)
 
-        val cipher = Cipher.getInstance(AES_GCM)
-        cipher.init(Cipher.ENCRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
+        val aesKey = getKey()
+        val hmacKey = deriveHmacKey(aesKey)
 
-        // CipherOutputStream.close() flushes + closes the underlying
-        // FileOutputStream as part of its contract. That meant the
-        // previous version's `fos.flush() + fos.fd.sync()` AFTER the
-        // inner use{} block ran on an already-closed fd — flush was a
-        // no-op and fd.sync() threw IOException (silently swallowed by
-        // runCatching), so the GCM tag never reached disk on a fast
-        // service reap. Round 5: drive the cipher manually with
-        // update/doFinal so we keep fos open through the explicit flush
-        // + fsync, then close it ourselves.
+        val cipher = Cipher.getInstance(AES_CTR)
+        cipher.init(Cipher.ENCRYPT_MODE, aesKey, IvParameterSpec(ivCtr))
+
+        val mac = Mac.getInstance(HMAC)
+        mac.init(hmacKey)
+
         var totalRead = 0L
         val fos = FileOutputStream(outputFile)
         try {
-            fos.write(iv)
-            val buffer = ByteArray(8192)
+            // Header: magic + IV. Both feed the HMAC so a header tamper
+            // is detected at decrypt time alongside any ciphertext flip.
+            fos.write(V2_MAGIC)
+            fos.write(ivCtr)
+            mac.update(V2_MAGIC)
+            mac.update(ivCtr)
+
+            val buffer = ByteArray(64 * 1024)
             input.use { ins ->
                 var read: Int
                 while (ins.read(buffer).also { read = it } != -1) {
-                    val out = cipher.update(buffer, 0, read)
-                    if (out != null && out.isNotEmpty()) fos.write(out)
+                    // CTR is a true stream cipher: cipher.update() returns
+                    // exactly `read` bytes of ciphertext per call, no
+                    // internal buffering — that's the whole reason this
+                    // fix exists.
+                    val ct = cipher.update(buffer, 0, read)
+                    if (ct != null && ct.isNotEmpty()) {
+                        fos.write(ct)
+                        mac.update(ct)
+                    }
                     totalRead += read
                 }
             }
-            // doFinal() returns any final ciphertext + the 16-byte GCM
-            // auth tag. Write it before fsync so the whole encrypted
-            // blob is durable on disk by the time we return.
+            // CTR has no padding; doFinal returns 0 bytes in practice but
+            // we honor it for correctness.
             val tail = cipher.doFinal()
-            if (tail.isNotEmpty()) fos.write(tail)
+            if (tail.isNotEmpty()) {
+                fos.write(tail)
+                mac.update(tail)
+            }
+            // 32-byte authentication tag at the end.
+            fos.write(mac.doFinal())
             fos.flush()
             runCatching { fos.fd.sync() }
         } finally {
@@ -496,18 +548,114 @@ class FileEncryptionService @Inject constructor(
         return totalRead
     }
 
+    /**
+     * Derive a separate HMAC key from the AES master key. Plain SHA-256
+     * over key || domain-separation tag is an adequate KDF when the
+     * master key already has full entropy (as the Keystore-derived
+     * passphrase does).
+     */
+    private fun deriveHmacKey(aesKey: SecretKey): SecretKeySpec {
+        val md = MessageDigest.getInstance("SHA-256")
+        md.update(aesKey.encoded)
+        md.update("stealthcalc-hmac-v2".toByteArray(Charsets.UTF_8))
+        return SecretKeySpec(md.digest(), HMAC)
+    }
+
     private fun decryptFile(encFile: File, outputFile: File) {
-        val fis = FileInputStream(encFile)
+        FileOutputStream(outputFile).use { fos ->
+            decryptFileTo(encFile, fos)
+            fos.flush()
+            runCatching { fos.fd.sync() }
+        }
+    }
+
+    /**
+     * Detect format (v2 magic vs legacy) and stream-decrypt to the
+     * caller-supplied OutputStream. Used by both decryptFile (-> File)
+     * and exportToMediaStore (-> ContentResolver-owned stream) so we
+     * never decrypt to a temp first.
+     */
+    private fun decryptFileTo(encFile: File, out: OutputStream) {
+        FileInputStream(encFile).use { fis ->
+            val header = ByteArray(V2_MAGIC.size)
+            val read = fis.read(header)
+            val isV2 = read == V2_MAGIC.size && header.contentEquals(V2_MAGIC)
+            if (isV2) {
+                decryptV2(fis, encFile.length(), out)
+            } else {
+                // Legacy file: re-open from byte 0 and run the original
+                // GCM path. Note: legacy files OOM on Conscrypt past
+                // ~150 MB, but anything that successfully encrypted under
+                // the old code is small enough to also decrypt here.
+                FileInputStream(encFile).use { legacyFis ->
+                    decryptLegacyGcm(legacyFis, out)
+                }
+            }
+        }
+    }
+
+    /**
+     * v2 streaming decrypt: AES-256-CTR + HMAC-SHA256 verify. Reads
+     * the file in 64 KB chunks; constant memory, works for any size.
+     * The HMAC over (magic || iv || ciphertext) is computed in the same
+     * pass and compared against the trailing 32 bytes via constant-time
+     * MessageDigest.isEqual.
+     */
+    private fun decryptV2(fis: FileInputStream, totalLen: Long, out: OutputStream) {
+        // We've already consumed V2_MAGIC. Read the 16-byte CTR IV.
+        val ivCtr = ByteArray(CTR_IV_SIZE)
+        check(fis.read(ivCtr) == CTR_IV_SIZE) { "Truncated v2 header" }
+
+        val aesKey = getKey()
+        val hmacKey = deriveHmacKey(aesKey)
+        val cipher = Cipher.getInstance(AES_CTR).apply {
+            init(Cipher.DECRYPT_MODE, aesKey, IvParameterSpec(ivCtr))
+        }
+        val mac = Mac.getInstance(HMAC).apply {
+            init(hmacKey)
+            update(V2_MAGIC)
+            update(ivCtr)
+        }
+
+        val ciphertextLen = totalLen - V2_HEADER_SIZE - HMAC_TAG_SIZE
+        check(ciphertextLen >= 0) { "v2 file too short for tag" }
+
+        var remaining = ciphertextLen
+        val buffer = ByteArray(64 * 1024)
+        while (remaining > 0) {
+            val toRead = minOf(remaining, buffer.size.toLong()).toInt()
+            val r = fis.read(buffer, 0, toRead)
+            if (r <= 0) error("Unexpected EOF after $remaining of $ciphertextLen bytes")
+            mac.update(buffer, 0, r)
+            val pt = cipher.update(buffer, 0, r)
+            if (pt != null && pt.isNotEmpty()) out.write(pt)
+            remaining -= r
+        }
+        val tail = cipher.doFinal()
+        if (tail.isNotEmpty()) out.write(tail)
+
+        val expectedTag = ByteArray(HMAC_TAG_SIZE)
+        check(fis.read(expectedTag) == HMAC_TAG_SIZE) { "Missing HMAC tag" }
+        val computedTag = mac.doFinal()
+        if (!MessageDigest.isEqual(expectedTag, computedTag)) {
+            error("HMAC verification failed")
+        }
+    }
+
+    /**
+     * Legacy v1 (AES-GCM) decryption — kept for files written before the
+     * v2 format hotfix. Will OOM on files larger than ~150 MB because of
+     * Conscrypt's GCM internal buffering, but legacy files are guaranteed
+     * smaller than that since the encrypt path used to OOM at the same
+     * point.
+     */
+    private fun decryptLegacyGcm(fis: FileInputStream, out: OutputStream) {
         val iv = ByteArray(IV_SIZE)
         fis.read(iv)
-
         val cipher = Cipher.getInstance(AES_GCM)
         cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(TAG_SIZE, iv))
-
         CipherInputStream(fis, cipher).use { cis ->
-            FileOutputStream(outputFile).use { fos ->
-                cis.copyTo(fos, 8192)
-            }
+            cis.copyTo(out, 8192)
         }
     }
 
