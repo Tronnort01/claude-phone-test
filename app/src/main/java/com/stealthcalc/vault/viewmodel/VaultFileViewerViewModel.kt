@@ -1,14 +1,17 @@
 package com.stealthcalc.vault.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.vault.data.VaultRepository
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.model.VaultSortOrder
 import com.stealthcalc.vault.service.FileEncryptionService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +35,7 @@ class VaultFileViewerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: VaultRepository,
     private val encryptionService: FileEncryptionService,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val initialFileId: String = checkNotNull(savedStateHandle["fileId"]) {
@@ -88,13 +92,31 @@ class VaultFileViewerViewModel @Inject constructor(
      * Decrypt a vault file to a cached plaintext temp. Safe to call from
      * a LaunchedEffect — per-fileId Mutex prevents duplicate work, cache
      * keeps repeat calls O(1).
+     *
+     * On failure, we log via AppLogger with the file's id / name / type /
+     * size and the exception class+message, so a user-exported app.txt
+     * (Settings → Diagnostics → Export crash log) shows exactly why a
+     * file won't open. Previously this was a silent runCatching.getOrNull()
+     * which meant decrypt failures (bad GCM tag, missing file) were
+     * invisible outside of the UI's generic "Failed to decrypt" text.
      */
     suspend fun decrypt(file: VaultFile): File? = withContext(Dispatchers.IO) {
         decryptMutex.withLock {
             tempCache[file.id]?.let { if (it.exists()) return@withContext it }
-            runCatching { encryptionService.decryptToTempFile(file) }
-                .getOrNull()
-                ?.also { tempCache[file.id] = it }
+            try {
+                val temp = encryptionService.decryptToTempFile(file)
+                tempCache[file.id] = temp
+                temp
+            } catch (e: Exception) {
+                AppLogger.log(
+                    appContext,
+                    "vault",
+                    "decrypt failed id=${file.id} name=${file.originalName} " +
+                        "type=${file.fileType} encSize=${runCatching { java.io.File(file.encryptedPath).length() }.getOrDefault(-1L)}: " +
+                        "${e.javaClass.simpleName}: ${e.message}",
+                )
+                null
+            }
         }
     }
 
