@@ -13,6 +13,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.security.SecureRandom
 import java.util.UUID
 import javax.crypto.Cipher
@@ -412,6 +413,50 @@ class FileEncryptionService @Inject constructor(
         encryptStream(FileInputStream(tempThumb), thumbFile)
         tempThumb.delete()
         return thumbFile.absolutePath
+    }
+
+    /**
+     * Best-effort forensic delete: overwrite the file's bytes with
+     * cryptographically random data, fsync, then unlink.
+     *
+     * Limits (document, don't pretend otherwise):
+     *  - Flash storage uses wear leveling, so the physical NAND cells
+     *    containing the original bytes may remain intact after an
+     *    overwrite. A single random-pass write is the practical ceiling
+     *    without hardware support (eMMC/UFS SECURE_ERASE commands) we
+     *    don't have access to from userspace.
+     *  - Android's FBE means the filesystem is already encrypted at rest;
+     *    this pass just ensures the plaintext bytes in our process's own
+     *    inode are replaced before the FS returns the sectors to the
+     *    allocator.
+     *
+     * One overwrite pass is adequate for NIST SP 800-88 "Clear" guidance
+     * on modern media. Multi-pass (Gutmann, DoD 5220.22-M) patterns add
+     * nothing on SSD/flash — they were designed for magnetic media.
+     */
+    fun secureDelete(file: File) {
+        if (!file.exists()) {
+            return
+        }
+        runCatching {
+            val len = file.length()
+            if (len > 0) {
+                RandomAccessFile(file, "rw").use { raf ->
+                    val buf = ByteArray(8192)
+                    val rng = SecureRandom()
+                    var remaining = len
+                    raf.seek(0)
+                    while (remaining > 0) {
+                        rng.nextBytes(buf)
+                        val n = if (remaining < buf.size.toLong()) remaining.toInt() else buf.size
+                        raf.write(buf, 0, n)
+                        remaining -= n
+                    }
+                    raf.fd.sync()
+                }
+            }
+        }
+        runCatching { file.delete() }
     }
 
     private fun classifyMimeType(mimeType: String): VaultFileType {

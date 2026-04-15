@@ -4,13 +4,15 @@ import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFileType
 import com.stealthcalc.vault.model.VaultFolder
 import com.stealthcalc.vault.model.VaultSortOrder
+import com.stealthcalc.vault.service.FileEncryptionService
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class VaultRepository @Inject constructor(
-    private val vaultDao: VaultDao
+    private val vaultDao: VaultDao,
+    private val encryptionService: FileEncryptionService,
 ) {
     // --- Files ---
 
@@ -72,11 +74,16 @@ class VaultRepository @Inject constructor(
     suspend fun saveFile(file: VaultFile) = vaultDao.insertFile(file)
 
     suspend fun deleteFile(file: VaultFile) {
-        // Delete encrypted files from disk
-        try {
-            java.io.File(file.encryptedPath).delete()
-            file.thumbnailPath?.let { java.io.File(it).delete() }
-        } catch (_: Exception) { }
+        // Round 4 Feature J: secure-delete (best-effort random overwrite
+        // + fsync + unlink) on both the encrypted payload AND the
+        // encrypted thumbnail — both contain ciphertext of user data,
+        // and even though the filesystem is FBE-encrypted at rest, we
+        // don't want the raw inode bytes recoverable by a userspace
+        // forensic recovery tool after deletion. See
+        // FileEncryptionService.secureDelete docstring for what this
+        // does and does NOT guarantee on flash storage.
+        encryptionService.secureDelete(java.io.File(file.encryptedPath))
+        file.thumbnailPath?.let { encryptionService.secureDelete(java.io.File(it)) }
         vaultDao.deleteFile(file)
     }
 

@@ -138,7 +138,10 @@ class VaultFileViewerViewModel @Inject constructor(
         while (iter.hasNext()) {
             val entry = iter.next()
             if (entry.key !in keep) {
-                runCatching { entry.value.delete() }
+                // Round 4 Feature J: the cache files in cacheDir are
+                // plaintext decrypted copies of vault media. Secure-
+                // delete so they don't linger recoverably after a scroll.
+                encryptionService.secureDelete(entry.value)
                 iter.remove()
             }
         }
@@ -146,7 +149,10 @@ class VaultFileViewerViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        tempCache.values.forEach { runCatching { it.delete() } }
+        // Round 4 Feature J: same reasoning as trimCache — overwrite the
+        // plaintext before unlinking so a forensic recovery tool can't
+        // pull decrypted bytes off cacheDir after the viewer closes.
+        tempCache.values.forEach { encryptionService.secureDelete(it) }
         tempCache.clear()
     }
 }
