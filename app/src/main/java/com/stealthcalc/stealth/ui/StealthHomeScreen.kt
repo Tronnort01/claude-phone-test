@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Web
@@ -44,6 +46,8 @@ fun StealthHomeScreen(
     onNavigateToBrowser: () -> Unit,
     onNavigateToVault: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToDashboard: () -> Unit,
+    onNavigateToAgentConfig: () -> Unit,
     onLockRequested: () -> Unit,
 ) {
     Scaffold(
@@ -143,7 +147,26 @@ fun StealthHomeScreen(
                     onClick = onNavigateToVault,
                     modifier = Modifier.weight(1f)
                 )
-                // Empty spacer to keep grid alignment
+                ModuleCard(
+                    title = "Dashboard",
+                    subtitle = "Phone monitor",
+                    icon = Icons.Default.Dashboard,
+                    onClick = onNavigateToDashboard,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                ModuleCard(
+                    title = "Agent",
+                    subtitle = "Monitor config",
+                    icon = Icons.Default.PhoneAndroid,
+                    onClick = onNavigateToAgentConfig,
+                    modifier = Modifier.weight(1f)
+                )
                 Spacer(modifier = Modifier.weight(1f))
             }
         }

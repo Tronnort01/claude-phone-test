@@ -1,6 +1,7 @@
 package com.stealthcalc.core.data
 
 import androidx.room.TypeConverter
+import com.stealthcalc.monitoring.model.MonitoringEventKind
 import com.stealthcalc.recorder.model.CameraFacing
 import com.stealthcalc.recorder.model.RecordingType
 import com.stealthcalc.vault.model.VaultFileType
@@ -61,6 +62,13 @@ class Converters {
 
     @TypeConverter
     fun toVaultFileType(value: String): VaultFileType = VaultFileType.valueOf(value)
+
+    // MonitoringEventKind
+    @TypeConverter
+    fun fromMonitoringEventKind(kind: MonitoringEventKind): String = kind.name
+
+    @TypeConverter
+    fun toMonitoringEventKind(value: String): MonitoringEventKind = MonitoringEventKind.valueOf(value)
 
     // Set<String> for tags
     @TypeConverter

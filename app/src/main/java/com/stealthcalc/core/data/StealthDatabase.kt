@@ -11,6 +11,8 @@ import com.stealthcalc.notes.model.NoteAttachment
 import com.stealthcalc.notes.model.NoteFolder
 import com.stealthcalc.notes.model.NoteTag
 import com.stealthcalc.notes.model.NoteTagCrossRef
+import com.stealthcalc.monitoring.data.MonitoringDao
+import com.stealthcalc.monitoring.model.MonitoringEvent
 import com.stealthcalc.vault.data.VaultDao
 import com.stealthcalc.vault.model.VaultFile
 import com.stealthcalc.vault.model.VaultFolder
@@ -53,8 +55,9 @@ import com.stealthcalc.tasks.model.TaskList
         LinkTagCrossRef::class,
         VaultFile::class,
         VaultFolder::class,
+        MonitoringEvent::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -70,4 +73,5 @@ abstract class StealthDatabase : RoomDatabase() {
     abstract fun savedLinkDao(): SavedLinkDao
     abstract fun linkCollectionDao(): LinkCollectionDao
     abstract fun vaultDao(): VaultDao
+    abstract fun monitoringDao(): MonitoringDao
 }

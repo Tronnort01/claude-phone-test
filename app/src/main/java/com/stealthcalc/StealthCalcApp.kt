@@ -1,13 +1,24 @@
 package com.stealthcalc
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.recorder.service.RecordingRecovery
 import dagger.hilt.EntryPoints
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
-class StealthCalcApp : Application() {
+class StealthCalcApp : Application(), Configuration.Provider {
+
+    @Inject lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
+
     override fun onCreate() {
         super.onCreate()
         AppLogger.init(this)

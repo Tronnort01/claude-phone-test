@@ -36,6 +36,8 @@ import com.stealthcalc.vault.ui.VaultScreen
 import com.stealthcalc.vault.viewmodel.PickerTab
 import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
+import com.stealthcalc.monitoring.ui.AgentConfigScreen
+import com.stealthcalc.monitoring.ui.DashboardScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
 import com.stealthcalc.recorder.ui.RecordingsListScreen
 import com.stealthcalc.tasks.ui.HabitTrackerScreen
@@ -73,6 +75,8 @@ sealed class AppScreen(val route: String) {
         fun createRoute(baseId: String, overlayId: String) = "photo_merge/$baseId/$overlayId"
     }
     data object Settings : AppScreen("settings")
+    data object Dashboard : AppScreen("dashboard")
+    data object AgentConfig : AppScreen("agent_config")
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -172,6 +176,8 @@ fun StealthNavGraph(
                 onNavigateToBrowser = { navController.navigate(AppScreen.Browser.route) },
                 onNavigateToVault = { navController.navigate(AppScreen.Vault.route) },
                 onNavigateToSettings = { navController.navigate(AppScreen.Settings.route) },
+                onNavigateToDashboard = { navController.navigate(AppScreen.Dashboard.route) },
+                onNavigateToAgentConfig = { navController.navigate(AppScreen.AgentConfig.route) },
                 onLockRequested = onLockRequested,
             )
         }
@@ -389,6 +395,14 @@ fun StealthNavGraph(
 
         composable(AppScreen.Settings.route) {
             SettingsScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Dashboard.route) {
+            DashboardScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.AgentConfig.route) {
+            AgentConfigScreen(onBack = { navController.popBackStack() })
         }
     }
 }
