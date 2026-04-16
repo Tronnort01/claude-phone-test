@@ -35,6 +35,7 @@ All seven issues below are **FIXED**. Commits on `master`:
 | C (R4) | `d2e0b82` | Recording marker + on-start/on-boot orphan auto-resume |
 | B (R4) | `948a29d` | SYSTEM_ALERT_WINDOW overlay lock service (home-swipe survives) |
 | Round 5 | `6eb39dc..33cd2d3` | ExoPlayer video, vault export, photo merge, real-lock UX, AES-CTR+HMAC streaming encryption (OOM hotfix) |
+| Round 6 | (this round) | CI-only: fix green-run-no-APK bug in `build-apk.yml` — drop `continue-on-error: true`, set `if-no-files-found: error`, add APK-outputs diagnostic |
 
 Each fix is its own commit, pushable and bisectable by GitHub Actions. See `docs/FIX_PLAN.md` for what shipped per fix + any deviations from the original plan.
 
@@ -81,6 +82,18 @@ Round 5 known limitations (carried into next round):
 - ML background removal not yet implemented. The plumbing is in place — `PhotoMergeScreen` already does Compose canvas compositing with `graphicsLayer`, so adding a third operation that runs `com.google.mlkit:segmentation-subject` on the base bitmap and applies the binary mask is a single new screen + ~10 MB APK growth. User chose merge-only this round.
 - Legacy GCM-encrypted vault files larger than ~150 MB will OOM on decrypt because Conscrypt's GCM buffers the whole plaintext during `doFinal()`. In practice no such file exists — they would have OOMed during encrypt under the old code — but if one is ever discovered (e.g. transferred from another device), it'll need a manual one-shot heap bump or a re-encrypt-via-SAF tool. New writes are always v2 streaming.
 - The user's already-failed 446 MB MP4 sitting in `filesDir/recordings/` from Round 4 should be picked up by `RecordingRecovery.scanAndRecover()` on the next app start (file is >1 KB and the marker may have been cleaned, but Feature C's markerless path catches it). Re-encryption with v2 should succeed and the file lands in the vault. If recovery doesn't catch it (e.g. the file sat there >7 days and was reaped), the user can just record again.
+
+---
+
+## Post-testing iterations — Round 6 (2026-04-16) — CI fix, no app-code change
+
+User report: "the latest build is green, but I don't see a apk file zip to download." Log shows `BUILD SUCCESSFUL in 3m 2s`, all 41 tasks executed, but the `StealthCalc-debug` artifact is missing from the run.
+
+Branch: `claude/fix-missing-apk-output-KV3y5`. No app/src change — this is a CI workflow bug.
+
+| # | Issue → Resolution | Commit | Root cause |
+|---|---|---|---|
+| CI1 | Green run, no APK artifact | (this round) | `.github/workflows/build-apk.yml` combined `continue-on-error: true` on the gradle step with `if: success()` on the upload step, and left `if-no-files-found` at its `warn` default. `continue-on-error: true` forces the step `conclusion` to "success" regardless of the actual `outcome`; `success()` reads `conclusion`; so whether gradle passed or failed, `Upload APK` ran. With default `if-no-files-found: warn` it silently emitted an empty artifact slot when the APK wasn't there. The trailing `grep "BUILD FAILED"` "Fail if build failed" step only fires AFTER the upload step — by then the (empty or missing) artifact has already been recorded, and a successful build that for any reason produced the APK at an unexpected path would also hit this silent path. The project's own pre-push checklist at `docs/ANDROID_BUILD_LESSONS.md:19` called this rule out — "Upload step uses `if-no-files-found: error`" — but the workflow had drifted from it. Fix: drop `continue-on-error: true` (Actions bash is `-eo pipefail`, so `gradle … \| tee` fails the step correctly on gradle non-zero), set `if-no-files-found: error` on the APK upload, delete the now-redundant "Fail if build failed" step, and add a `List APK outputs` diagnostic step (`ls -la app/build/outputs/apk/debug/` + `find app/build -name 'app-debug*.apk'`) so any future path-drift failure surfaces the actual directory contents in the Actions log. Updated the `docs/ANDROID_BUILD_LESSONS.md` "Build / Workflow" table and the "Required Workflow Template" block so the canonical template no longer reproduces the footgun. |
 
 ---
 
