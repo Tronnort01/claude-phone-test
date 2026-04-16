@@ -46,6 +46,7 @@ A personal stealth productivity Android app disguised as a calculator. Enter a s
 6. **Browser** — GeckoView (Firefox), Enhanced Tracking Protection, no cookies, private mode (`browser/`)
 7. **Vault** — AES-256 encrypted media storage, secure camera, sort by date/size/name, **multi-select export**, **photo merge** (`vault/`). Thumbnails decrypt via `FileEncryptionService.decryptThumbnail` on a background dispatcher (Fix 3a). `VaultFileViewerScreen` uses `HorizontalPager` to swipe between files of the same type; decryption is per-page on-demand with a per-fileId cache trimmed as the user pages (Follow-up Fix C). Photo renderer is `BitmapFactory`/`Image`; **video renderer is Media3 ExoPlayer** (Round 5 — replaced `VideoView` after 4 rounds of "spins forever" bugs); audio uses framework `MediaPlayer` (Fix 3b). Gallery import uses an in-app MediaStore picker (Round 3 J — no Google Photos). **Export to public library (Round 5 P):** long-press a card → contextual toolbar (count + Export + Delete) → `FileEncryptionService.exportToMediaStore()` streams decrypted bytes through `MediaStore.insert + openOutputStream` into `Pictures/StealthCalc`, `Movies/StealthCalc`, `Music/StealthCalc` — no plaintext temp file ever written. **Photo merge (Round 5 Q):** viewer overflow → in-vault picker → Compose `graphicsLayer` editor (drag/zoom/rotate/opacity) → `Canvas` composite at native resolution → saved as `Merged_<timestamp>.jpg`.
 8. **Settings** — Change PIN, decoy PIN, biometric toggle, auto-lock timer, panic shake/back, screenshot blocking, **Export crash log** as `.txt` (Fix 1 + Follow-up Fix A) (`settings/`)
+9. **Monitoring** (Round 6) — Phone monitoring agent + dashboard (`monitoring/`). Same APK, runtime role toggle (`disabled`/`agent`/`dashboard`/`both`). **Agent** collects 7 data sources: app usage (`UsageStatsManager`), screen on/off/unlock, battery (level/charging/temp/voltage), WiFi SSID + network state, app installs/uninstalls, incoming notifications (`NotificationListenerService`), location (`FusedLocationProviderClient`). Events buffer in local SQLCipher (`MonitoringEvent` entity), upload to server via Ktor HTTP in 120s batches. `AgentService` is a `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` `LifecycleService`; `AgentSyncWorker` is a 15-min `WorkManager` backup. `NotificationMonitorService` is a system-bound NLS. **Dashboard** polls `GET /state/{deviceId}` every 30s showing device status card + event timeline. **Server** (`server/`) is a separate Kotlin+Ktor+Netty+SQLite project, deployed on a home server reachable via Tailscale. Pairing: server generates 6-digit OTP → agent redeems → bearer token issued. See `docs/MONITORING_DESIGN.md` for full architecture.
 
 ## Key Architecture Decisions
 - Single Activity (`MainActivity`) — OS only sees "Calculator"
@@ -100,6 +101,13 @@ app/src/main/java/com/stealthcalc/
 ├── recorder/                  # Audio/video recorder + FakeLockScreen
 ├── browser/                   # GeckoView browser + AdBlocker + ReaderMode + LinkVault
 ├── vault/                     # Encrypted media vault + SecureCamera + FileEncryptionService
+├── monitoring/                # Phone monitoring agent/dashboard (Round 6)
+│   ├── model/                 # MonitoringEvent entity + serializable DTOs
+│   ├── data/                  # MonitoringDao + MonitoringRepository
+│   ├── collector/             # 6 data collectors + AppInstallReceiver
+│   ├── service/               # AgentService (FGS) + NotificationMonitorService (NLS) + AgentSyncWorker
+│   ├── network/               # AgentApiClient (Ktor HTTP)
+│   └── ui/                    # AgentConfigScreen + DashboardScreen + ViewModels
 ├── settings/                  # Settings screen + ViewModel
 └── ui/theme/                  # Material 3 theme
 ```
@@ -118,7 +126,7 @@ Original APK shipped with 7 runtime/UX bugs. On-device testing on a Pixel 6 / An
 - GeckoView requires the omni arch suffix for v118+: `geckoview-omni-arm64-v8a`, NOT plain `geckoview` and NOT the non-omni `geckoview-arm64-v8a`
 - GeckoView version format is `MAJOR.MINOR.BUILDTIMESTAMP` — the timestamp must match an actual published build on `maven.mozilla.org`
 - `combine()` with >5 flows needs the vararg Array form
-- **Room DB version is 6** (bumped 5 → 6 in Fix 4 for `Recording.vaultFileId`). `DatabaseModule` uses `.fallbackToDestructiveMigration()` — fine pre-release, replace with real migrations before shipping.
+- **Room DB version is 7** (bumped 6 → 7 in Round 6 for `MonitoringEvent` entity). `DatabaseModule` uses `.fallbackToDestructiveMigration()` — fine pre-release, replace with real migrations before shipping.
 - Don't use `StorageController.ClearFlags.ALL` for GeckoView — use individual flags ORed together
 - AGP 8.5.2 has `buildConfig` **off by default** — `BuildConfig.APPLICATION_ID` / `VERSION_NAME` aren't generated. Either enable in `buildFeatures { buildConfig = true }` or read via `context.packageManager.getPackageInfo(...)` at runtime (see `core/logging/AppLogger.kt`).
 - Compose BOM 2024.08.00 → Compose UI 1.6.8, Material3 ~1.2.1. The `LinearProgressIndicator(progress: () -> Float)` lambda form is 1.3+ only — use the scalar `progress: Float` here.

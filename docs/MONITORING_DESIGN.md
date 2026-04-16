@@ -1,7 +1,7 @@
 # Phone-Monitoring Module — Design Notes (in progress)
 
-**Status:** Planning only. No code written. Branch: `claude/plan-app-monitoring-W0UKj`.
-**Session:** 2026-04-16 — planning stopped before final plan was written (tool-load timeouts ate the turns). Pick up here next session.
+**Status:** MVP implementation complete. Agent module + server shipped on branch `claude/plan-app-monitoring-W0UKj`.
+**Session:** 2026-04-16 — planning + implementation. Commits: `c6e902e` (agent module), `6196955` (server).
 
 ---
 
@@ -181,8 +181,35 @@ Shared DTOs via a `shared/` Kotlin Multiplatform module (or just copy-pasted dat
 
 ---
 
-## 10. Next-session starter prompt
+## 10. What shipped (2026-04-16)
 
-> "Read context, here's my feedback on `docs/MONITORING_DESIGN.md`: &lt;changes&gt;. Proceed to implementation on branch `claude/plan-app-monitoring-W0UKj`. Start with the Android agent module (manifest permissions, Hilt wiring, Room entities v7) before touching the server."
+### Commit `c6e902e` — Android agent module
+- `monitoring/model/` — `MonitoringEvent` Room entity, `MonitoringEventKind` enum, serializable DTOs for all payloads + API communication
+- `monitoring/data/` — `MonitoringDao` (insert, unsent query, mark-uploaded, prune), `MonitoringRepository` (DAO + EncryptedSharedPreferences for config)
+- `monitoring/collector/` — 6 collectors: `AppUsageCollector`, `BatteryCollector`, `ScreenStateCollector`, `NetworkCollector`, `AppInstallReceiver`, `LocationCollector`
+- `monitoring/service/` — `AgentService` (FGS SPECIAL_USE, 60s collect + 120s upload loops), `NotificationMonitorService` (NLS), `AgentSyncWorker` (HiltWorker 15-min periodic)
+- `monitoring/network/` — `AgentApiClient` (Ktor 2.3.12 + OkHttp, pair/upload/getState/getEvents)
+- `monitoring/ui/` — `AgentConfigScreen` (role picker, server URL, OTP pairing, metric toggles), `DashboardScreen` (device status card, event timeline, 30s poll)
+- Stealth home grid: two new tiles (Dashboard + Agent Config)
+- `AppNavigation.kt`: two new routes
+- DB v6 → v7 (`MonitoringEvent` entity)
+- New deps: Ktor client, kotlinx-serialization, play-services-location, hilt-work
+- Manifest: `PACKAGE_USAGE_STATS`, `QUERY_ALL_PACKAGES`, `FINE/COARSE_LOCATION`, `WIFI_STATE`, `NETWORK_STATE`, `FOREGROUND_SERVICE_SPECIAL_USE`
+- `StealthCalcApp` now implements `Configuration.Provider` for Hilt WorkManager init
 
-Everything needed to start coding is above. Re-read §5 (reuse surface) before writing any new file so we don't reinvent patterns.
+### Commit `6196955` — Kotlin+Ktor home server
+- `server/` — separate Gradle project (not part of Android build)
+- Ktor 2.3.12 + Netty + Exposed ORM + SQLite
+- Routes: `POST /pair/request` (OTP gen), `POST /pair` (OTP → token), `POST /events/batch`, `GET /events/{deviceId}`, `GET /state/{deviceId}`, `WS /live/{deviceId}`, `GET /health`
+- Tables: `devices`, `events`, `recent_state` (upserted per batch), `pairing_codes`
+- Auth: bcrypt-hashed bearer tokens, 6-digit OTP pairing
+- Run: `cd server && gradle run` (env: HOST, PORT, DB_PATH)
+
+## 11. What's next
+
+- **On-device testing:** build APK, sideload on both phones, pair with server, verify event flow end-to-end.
+- **Server deployment:** install Gradle + JDK on home server, run as a systemd service, bind to tailnet interface.
+- **Dashboard polish:** app-usage chart (minutes per app), notification list, location map.
+- **Accessibility service round:** if user wants typed text / on-screen content monitoring.
+- **Event retention policy:** server-side cron or Ktor coroutine to prune events older than N days.
+- **Merge to master** once tested.

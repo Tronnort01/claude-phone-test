@@ -485,3 +485,20 @@ Session-wide process notes that paid off:
 - **Fix 1 first** was the single best ordering decision — every subsequent on-device failure is exportable from Settings → Diagnostics without ADB.
 - **Framework over libraries** for media playback avoided touching `libs.versions.toml` / `app/build.gradle.kts` at all. Build surface was tiny (0 new deps across 7 fixes).
 - **Double-check API availability vs. BOM version** — Material3 `LinearProgressIndicator(progress: () -> Float)` looked obvious but is 1.3+, not in BOM 2024.08.00 (1.2.1). Generally assume the lower end of whatever the BOM pins.
+
+---
+
+## Round 6: Phone Monitoring Module (2026-04-16)
+
+### New dependency patterns
+
+| Topic | Gotcha | Fix |
+|---|---|---|
+| `kotlinx.serialization` plugin | Must be `org.jetbrains.kotlin.plugin.serialization` with the **same version as Kotlin** (2.0.10). Different from the runtime dep version (1.7.1). | Version catalog: `kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }` |
+| Ktor client on Android | Use `ktor-client-okhttp` engine (not CIO or Android — CIO has issues with TLS on some API levels, Android engine is experimental). | `implementation(libs.ktor.client.okhttp)` |
+| `@HiltWorker` | Requires both `androidx.hilt:hilt-work` AND `ksp(androidx.hilt:hilt-compiler)` (this is separate from dagger `hilt-android-compiler`). Also requires custom `WorkManager` init via `Configuration.Provider`. | See `StealthCalcApp.kt` + manifest `<provider>` that disables `WorkManagerInitializer`. |
+| `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` | New in API 34. Must declare a `<property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE">` child inside the `<service>` tag explaining the use case. Without it, Play Store review rejects. | Sideloaded app — not a concern for us, but declared anyway for completeness. |
+| `NotificationListenerService` | NOT a permission grant — user must toggle it in Settings → Notification access. `@AndroidEntryPoint` works because it extends `Service`. System manages binding lifecycle. | Must be `android:exported="true"` with `android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"`. |
+| `PACKAGE_USAGE_STATS` | Special permission — not grantable at runtime via `requestPermissions()`. User must go to Settings → Usage access. Test with `UsageStatsManager.queryUsageStats()` — empty list means not granted. | Use `tools:ignore="ProtectedPermissions"` in manifest to suppress lint. Guide user to Settings from Agent Config UI. |
+| `play-services-location` | Transitive dep on `play-services-base`. On devices without Play Services, `FusedLocationProviderClient` throws. | Pixel 6 has Play Services. `LocationCollector.collect()` wraps in `runCatching`. |
+| Exposed ORM SQLite (server) | `upsert` with composite primary key needs both columns passed to `upsert()` call. SQLite doesn't support `ON CONFLICT` on multi-column PKs in all modes — test. | `RecentState.upsert(RecentState.deviceId, RecentState.field) { ... }` |
