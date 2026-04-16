@@ -8,6 +8,7 @@ Before touching any code on this project:
    - This file (CLAUDE.md) — you're in it.
    - `docs/ANDROID_BUILD_LESSONS.md` — gotchas we've already hit (FGS types on API 34+, photo picker vs `ACTION_PICK`, Compose API drift, delegated-property smart cast, etc.). Check the tables before writing anything new in those areas.
    - `docs/ISSUES_FOUND.md` and `docs/FIX_PLAN.md` — the three rounds of already-fixed bugs with commit SHAs. Read the Status tables first; drill into a specific issue only if the user's new task relates to it.
+   - **If the task is about phone monitoring / dashboard / agent:** read `docs/MONITORING_DESIGN.md` — in-progress design from the 2026-04-16 session. Captures user decisions (Tailscale + Kotlin/Ktor server + runtime role toggle), codebase reuse surface with line numbers, and open questions. Active branch: `claude/plan-app-monitoring-W0UKj`.
 
 2. **Build pipeline:** **GitHub Actions only.** Never run `./gradlew` locally — the container proxy blocks `dl.google.com` and `maven.mozilla.org`. Every push to `master` triggers `.github/workflows/build-apk.yml`; APK artifact is `StealthCalc-debug`, build log is uploaded on failure.
 
