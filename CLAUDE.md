@@ -122,6 +122,22 @@ app/src/main/java/com/stealthcalc/
 └── ui/theme/                  # Material 3 theme
 ```
 
+### Lightweight Agent (secondary phone) — `agent/`
+Separate Android project, independent Gradle build. ~5MB APK disguised as "Calculator".
+```
+agent/app/src/main/java/com/stealthagent/
+├── AgentApp.kt                # Hilt Application + WorkManager init
+├── collector/                 # AllCollectors (consolidated), AppInstallReceiver
+├── data/                      # AgentDao, AgentDatabase (Room+SQLCipher), AgentRepository, DiModule
+├── model/                     # MonitoringEvent entity, API DTOs
+├── network/                   # AgentClient (Ktor, direct WiFi + server fallback)
+├── service/                   # AgentForegroundService, BootReceiver,
+│                              #   AgentNotificationListener, AgentAccessibilityService
+└── ui/                        # MainActivity, CalculatorScreen (disguise),
+                               #   SetupScreen (one-time config, hidden behind secret code)
+```
+Build: `cd agent && gradle assembleDebug`. CI: `.github/workflows/build-agent.yml`, artifact: `StealthAgent-debug`.
+
 ## Runtime Issues — Historical Context
 Original APK shipped with 7 runtime/UX bugs. On-device testing on a Pixel 6 / Android 16 (API 36, targetSdk 35) then surfaced four more rounds of follow-up bugs / feature requests. All five rounds are now fixed on `master`. Before writing any new code:
 1. **Read `docs/ISSUES_FOUND.md`** — diagnosis of each original bug (file paths + line numbers), annotated with the commit SHA that resolved it, plus a new "Post-testing iterations" section summarizing the Round 1 + Round 2 follow-ups.
