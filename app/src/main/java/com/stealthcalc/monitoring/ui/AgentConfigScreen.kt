@@ -53,6 +53,7 @@ import com.stealthcalc.monitoring.data.MonitoringRepository
 @Composable
 fun AgentConfigScreen(
     onBack: () -> Unit,
+    onNavigateToGeofence: () -> Unit = {},
     viewModel: AgentConfigViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -242,6 +243,17 @@ fun AgentConfigScreen(
                     onToggle = { viewModel.toggleMetric(metricId) }
                 )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            SectionHeader("Geofencing")
+
+            SettingsRow(
+                title = "Configure Zones",
+                subtitle = "Add or remove geofence zones",
+                onClick = onNavigateToGeofence,
+                trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
         }

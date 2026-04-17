@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Campaign
@@ -88,6 +89,7 @@ fun DashboardScreen(
     onBack: () -> Unit,
     onNavigateToLiveScreen: () -> Unit = {},
     onNavigateToLiveCamera: () -> Unit = {},
+    onNavigateToAnalytics: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -107,6 +109,9 @@ fun DashboardScreen(
                             modifier = Modifier.size(20.dp).padding(end = 8.dp),
                             strokeWidth = 2.dp,
                         )
+                    }
+                    IconButton(onClick = onNavigateToAnalytics) {
+                        Icon(Icons.Default.BarChart, contentDescription = "Analytics")
                     }
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")

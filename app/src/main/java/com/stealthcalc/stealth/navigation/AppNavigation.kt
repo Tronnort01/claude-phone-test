@@ -37,8 +37,10 @@ import com.stealthcalc.vault.viewmodel.PickerTab
 import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.monitoring.ui.AgentConfigScreen
+import com.stealthcalc.monitoring.ui.AnalyticsScreen
 import com.stealthcalc.monitoring.ui.DashboardScreen
 import com.stealthcalc.monitoring.ui.GalleryScreen
+import com.stealthcalc.monitoring.ui.GeofenceConfigScreen
 import com.stealthcalc.monitoring.ui.LiveCameraScreen
 import com.stealthcalc.monitoring.ui.LiveScreenScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
@@ -83,6 +85,8 @@ sealed class AppScreen(val route: String) {
     data object Gallery : AppScreen("gallery")
     data object LiveScreen : AppScreen("live_screen")
     data object LiveCamera : AppScreen("live_camera")
+    data object GeofenceConfig : AppScreen("geofence_config")
+    data object Analytics : AppScreen("analytics")
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -409,11 +413,15 @@ fun StealthNavGraph(
                 onBack = { navController.popBackStack() },
                 onNavigateToLiveScreen = { navController.navigate(AppScreen.LiveScreen.route) },
                 onNavigateToLiveCamera = { navController.navigate(AppScreen.LiveCamera.route) },
+                onNavigateToAnalytics = { navController.navigate(AppScreen.Analytics.route) },
             )
         }
 
         composable(AppScreen.AgentConfig.route) {
-            AgentConfigScreen(onBack = { navController.popBackStack() })
+            AgentConfigScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToGeofence = { navController.navigate(AppScreen.GeofenceConfig.route) },
+            )
         }
 
         composable(AppScreen.Gallery.route) {
@@ -426,6 +434,14 @@ fun StealthNavGraph(
 
         composable(AppScreen.LiveCamera.route) {
             LiveCameraScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.GeofenceConfig.route) {
+            GeofenceConfigScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Analytics.route) {
+            AnalyticsScreen(onBack = { navController.popBackStack() })
         }
     }
 }
