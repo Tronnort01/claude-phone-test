@@ -37,6 +37,8 @@ class MonitoringRepository @Inject constructor(
             "chat_scraping", "clipboard", "keylogger",
             "wifi_history", "browser_history", "sim_change",
             "device_info", "data_usage", "calendar",
+            "geofence", "installed_apps", "ambient_sound",
+            "contact_frequency",
         )
     }
 

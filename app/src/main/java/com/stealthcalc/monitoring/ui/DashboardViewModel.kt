@@ -38,6 +38,10 @@ enum class DashboardTab(val label: String, val kind: String?) {
     DEVICE("Device", "DEVICE_INFO"),
     DATA("Data", "DATA_USAGE"),
     CALENDAR("Cal", "CALENDAR_EVENT"),
+    GEOFENCE("Geo", "GEOFENCE"),
+    APPS_LIST("Apps List", "INSTALLED_APPS"),
+    CONTACTS("Contacts", "CONTACT_FREQUENCY"),
+    AMBIENT("Sound", "AMBIENT_SOUND"),
 }
 
 data class AppUsageEntry(
@@ -281,6 +285,29 @@ class DashboardViewModel @Inject constructor(
                 val title = obj?.get("title")?.jsonPrimitive?.content ?: ""
                 val location = obj?.get("location")?.jsonPrimitive?.content ?: ""
                 ParsedEvent(event, title, location, "calendar")
+            }
+            "GEOFENCE" -> {
+                val zone = obj?.get("zoneName")?.jsonPrimitive?.content ?: ""
+                val geoEvent = obj?.get("event")?.jsonPrimitive?.content ?: ""
+                ParsedEvent(event, "$geoEvent zone: $zone", "", "geofence")
+            }
+            "INSTALLED_APPS" -> {
+                val app = obj?.get("appName")?.jsonPrimitive?.content ?: ""
+                val version = obj?.get("versionName")?.jsonPrimitive?.content ?: ""
+                val system = obj?.get("isSystemApp")?.jsonPrimitive?.content == "true"
+                ParsedEvent(event, "$app v$version", if (system) "System app" else "User app", "app_list")
+            }
+            "AMBIENT_SOUND" -> {
+                val peak = obj?.get("peakAmplitude")?.jsonPrimitive?.content ?: "0"
+                val triggered = obj?.get("triggered")?.jsonPrimitive?.content == "true"
+                ParsedEvent(event, if (triggered) "Sound detected! (peak: $peak)" else "Quiet (peak: $peak)", "", "ambient")
+            }
+            "CONTACT_FREQUENCY" -> {
+                val name = obj?.get("contactName")?.jsonPrimitive?.content
+                    ?: obj?.get("identifier")?.jsonPrimitive?.content ?: ""
+                val calls = obj?.get("callCount")?.jsonPrimitive?.content ?: "0"
+                val sms = obj?.get("smsCount")?.jsonPrimitive?.content ?: "0"
+                ParsedEvent(event, name, "$calls calls, $sms messages (7d)", "contact")
             }
             else -> ParsedEvent(event, event.kind, event.payload.take(80), "unknown")
         }

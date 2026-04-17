@@ -185,6 +185,10 @@ fun AgentConfigScreen(
                 Triple("device_info", "Device Info", "Storage, RAM, running apps, uptime"),
                 Triple("data_usage", "App Data Usage", "Network data consumed per app (24h)"),
                 Triple("calendar", "Calendar Events", "Read upcoming calendar entries"),
+                Triple("geofence", "Geofencing", "Alert on enter/exit configured zones"),
+                Triple("installed_apps", "Installed Apps Snapshot", "Full inventory of installed apps"),
+                Triple("ambient_sound", "Ambient Sound Trigger", "Record when loud sounds detected"),
+                Triple("contact_frequency", "Contact Frequency", "Top contacts by call/SMS volume"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->

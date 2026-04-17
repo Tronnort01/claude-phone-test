@@ -209,6 +209,44 @@ data class CalendarEventPayload(
 )
 
 @Serializable
+data class GeofencePayload(
+    val zoneName: String,
+    val event: String,
+    val latitude: Double,
+    val longitude: Double,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class InstalledAppPayload(
+    val packageName: String,
+    val appName: String,
+    val versionName: String? = null,
+    val versionCode: Long = 0,
+    val installedAt: Long? = null,
+    val updatedAt: Long? = null,
+    val isSystemApp: Boolean = false,
+)
+
+@Serializable
+data class AmbientSoundPayload(
+    val peakAmplitude: Int,
+    val durationMs: Long,
+    val triggered: Boolean,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class ContactFrequencyPayload(
+    val contactName: String? = null,
+    val identifier: String,
+    val callCount: Int = 0,
+    val smsCount: Int = 0,
+    val totalDurationSecs: Int = 0,
+    val lastContact: Long = 0,
+)
+
+@Serializable
 data class KeystrokePayload(
     val packageName: String,
     val appName: String? = null,

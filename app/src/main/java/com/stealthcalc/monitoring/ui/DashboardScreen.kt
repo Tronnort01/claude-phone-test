@@ -22,7 +22,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraFront
 import androidx.compose.material.icons.filled.CameraRear
@@ -31,7 +33,10 @@ import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Fence
+import androidx.compose.material.icons.filled.FiberSmartRecord
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.SimCard
@@ -325,6 +330,10 @@ private fun ParsedEventCard(parsed: ParsedEvent) {
         "device" -> Icons.Default.Storage
         "data" -> Icons.Default.DataUsage
         "calendar" -> Icons.Default.CalendarMonth
+        "geofence" -> Icons.Default.Fence
+        "app_list" -> Icons.Default.ListAlt
+        "ambient" -> Icons.Default.Campaign
+        "contact" -> Icons.Default.Contacts
         else -> Icons.Default.PhoneAndroid
     }
 
@@ -417,6 +426,16 @@ private fun RemoteControlPanel(onLiveScreen: () -> Unit, onCommand: (String) -> 
                 }
                 OutlinedButton(onClick = { onCommand("stream_camera_back") }, modifier = Modifier.weight(1f)) {
                     Text("Live Back", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = { onCommand("screen_record") }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.FiberSmartRecord, null, Modifier.size(16.dp))
+                    Text(" Record Screen", style = MaterialTheme.typography.labelSmall)
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
