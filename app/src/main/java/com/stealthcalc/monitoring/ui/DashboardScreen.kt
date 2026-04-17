@@ -1,5 +1,7 @@
 package com.stealthcalc.monitoring.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,21 +12,31 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.GetApp
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PhonelinkLock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -34,10 +46,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.stealthcalc.monitoring.model.EventPayload
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +72,12 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
+                    if (state.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp).padding(end = 8.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
@@ -74,7 +95,7 @@ fun DashboardScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Not paired. Go to Monitoring config to set up.",
+                    "Not paired. Go to Agent Config to set up.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     modifier = Modifier.padding(32.dp)
@@ -88,45 +109,39 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
-
-            if (state.isLoading && state.deviceState == null) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-            }
+            item { Spacer(modifier = Modifier.height(2.dp)) }
 
             state.error?.let { error ->
                 item {
-                    Text(
-                        error,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
             state.deviceState?.let { device ->
+                item { DeviceStatusCard(device) }
+            }
+
+            if (state.appUsage.isNotEmpty() && state.selectedTab == DashboardTab.ALL) {
+                item { AppUsageSummary(state.appUsage) }
+            }
+
+            item { FilterChipRow(state.selectedTab) { viewModel.selectTab(it) } }
+
+            if (state.parsedEvents.isEmpty() && !state.isLoading) {
                 item {
-                    DeviceStatusCard(device)
+                    Text(
+                        "No events yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
                 }
             }
 
-            if (state.recentEvents.isNotEmpty()) {
-                item {
-                    Text(
-                        "Recent Activity",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-                items(state.recentEvents.take(50)) { event ->
-                    EventCard(event)
-                }
+            items(state.parsedEvents, key = { it.raw.id }) { parsed ->
+                ParsedEventCard(parsed)
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -135,114 +150,191 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun DeviceStatusCard(device: com.stealthcalc.monitoring.model.DeviceState) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+private fun FilterChipRow(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.PhoneAndroid,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    device.deviceName,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-
-            device.currentApp?.let { app ->
-                StatusLine("Current App", app)
-            }
-
-            device.batteryLevel?.let { level ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (device.isCharging == true) Icons.Default.BatteryChargingFull
-                        else Icons.Default.BatteryFull,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        " Battery: $level%${if (device.isCharging == true) " (charging)" else ""}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-            }
-
-            device.wifiSsid?.let { ssid ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Wifi,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        " WiFi: $ssid",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-            }
-
-            device.isScreenOn?.let { on ->
-                StatusLine("Screen", if (on) "On" else "Off")
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Last seen: ${formatTimestamp(device.lastSeen)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        DashboardTab.entries.forEach { tab ->
+            FilterChip(
+                selected = selected == tab,
+                onClick = { onSelect(tab) },
+                label = { Text(tab.label, style = MaterialTheme.typography.labelSmall) },
             )
         }
     }
 }
 
 @Composable
-private fun StatusLine(label: String, value: String) {
-    Text(
-        "$label: $value",
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(vertical = 2.dp)
-    )
+private fun DeviceStatusCard(device: com.stealthcalc.monitoring.model.DeviceState) {
+    val isOnline = (System.currentTimeMillis() - device.lastSeen) < 5 * 60 * 1000L
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(if (isOnline) Color(0xFF4CAF50) else Color(0xFFBDBDBD))
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    Icons.Default.PhoneAndroid,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(device.deviceName, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    if (isOnline) "Online" else "Offline",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isOnline) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            device.currentApp?.let { app ->
+                InfoRow(Icons.Default.Apps, "Using $app")
+            }
+
+            device.batteryLevel?.let { level ->
+                val icon = if (device.isCharging == true) Icons.Default.BatteryChargingFull else Icons.Default.BatteryFull
+                val suffix = if (device.isCharging == true) " (charging)" else ""
+                InfoRow(icon, "Battery $level%$suffix")
+            }
+
+            device.wifiSsid?.let { ssid ->
+                InfoRow(Icons.Default.Wifi, ssid)
+            }
+
+            device.isScreenOn?.let { on ->
+                InfoRow(Icons.Default.PhonelinkLock, if (on) "Screen on" else "Screen off")
+            }
+
+            Text(
+                "Last seen: ${formatTimestamp(device.lastSeen)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
 }
 
 @Composable
-private fun EventCard(event: EventPayload) {
+private fun InfoRow(icon: ImageVector, text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 2.dp)
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+@Composable
+private fun AppUsageSummary(apps: List<AppUsageEntry>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Top Apps Today", style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val maxCount = apps.maxOfOrNull { it.foregroundCount } ?: 1
+            apps.take(5).forEach { entry ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        entry.appName,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.width(100.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    LinearProgressIndicator(
+                        progress = entry.foregroundCount.toFloat() / maxCount,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(8.dp)
+                            .padding(horizontal = 8.dp),
+                    )
+                    Text(
+                        "${entry.foregroundCount}x",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParsedEventCard(parsed: ParsedEvent) {
+    val icon = when (parsed.icon) {
+        "app" -> Icons.Default.Apps
+        "notification" -> Icons.Default.Notifications
+        "battery" -> Icons.Default.BatteryFull
+        "network" -> Icons.Default.Wifi
+        "screen" -> Icons.Default.PhonelinkLock
+        "install" -> Icons.Default.GetApp
+        "location" -> Icons.Default.LocationOn
+        else -> Icons.Default.PhoneAndroid
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(20.dp)
+                    .padding(top = 2.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    event.kind.lowercase().replace("_", " ").replaceFirstChar { it.uppercase() },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    parsed.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    formatTimestamp(event.capturedAt),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                )
+                if (parsed.subtitle.isNotBlank()) {
+                    Text(
+                        parsed.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Text(
-                event.payload.take(120),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                maxLines = 2,
+                formatTime(parsed.raw.capturedAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
             )
         }
     }
@@ -250,5 +342,10 @@ private fun EventCard(event: EventPayload) {
 
 private fun formatTimestamp(ms: Long): String {
     val sdf = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US)
+    return sdf.format(java.util.Date(ms))
+}
+
+private fun formatTime(ms: Long): String {
+    val sdf = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US)
     return sdf.format(java.util.Date(ms))
 }
