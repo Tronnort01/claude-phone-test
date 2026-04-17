@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhonelinkLock
 import androidx.compose.material.icons.filled.Screenshare
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.filled.Refresh
@@ -90,6 +92,8 @@ fun DashboardScreen(
     onNavigateToLiveScreen: () -> Unit = {},
     onNavigateToLiveCamera: () -> Unit = {},
     onNavigateToAnalytics: () -> Unit = {},
+    onNavigateToSmsConversations: () -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -109,6 +113,9 @@ fun DashboardScreen(
                             modifier = Modifier.size(20.dp).padding(end = 8.dp),
                             strokeWidth = 2.dp,
                         )
+                    }
+                    IconButton(onClick = onNavigateToSearch) {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
                     }
                     IconButton(onClick = onNavigateToAnalytics) {
                         Icon(Icons.Default.BarChart, contentDescription = "Analytics")
@@ -156,7 +163,7 @@ fun DashboardScreen(
 
             state.deviceState?.let { device ->
                 item { DeviceStatusCard(device) }
-                item { RemoteControlPanel(onNavigateToLiveScreen, onNavigateToLiveCamera, viewModel) }
+                item { RemoteControlPanel(onNavigateToLiveScreen, onNavigateToLiveCamera, onNavigateToSmsConversations, viewModel) }
             }
 
             if (state.appUsage.isNotEmpty() && state.selectedTab == DashboardTab.ALL) {
@@ -401,6 +408,7 @@ import androidx.compose.material.icons.filled.Message
 private fun RemoteControlPanel(
     onLiveScreen: () -> Unit,
     onLiveCamera: () -> Unit,
+    onSmsConversations: () -> Unit = {},
     viewModel: DashboardViewModel,
 ) {
     val onCommand: (String) -> Unit = { viewModel.sendCommand(it) }
@@ -476,12 +484,18 @@ private fun RemoteControlPanel(
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
-            OutlinedButton(
-                onClick = onLiveCamera,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Default.CameraFront, null, Modifier.size(16.dp))
-                Text(" Live Camera View", style = MaterialTheme.typography.labelSmall)
+                OutlinedButton(onClick = onLiveCamera, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.CameraFront, null, Modifier.size(16.dp))
+                    Text(" Camera", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(onClick = onSmsConversations, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Sms, null, Modifier.size(16.dp))
+                    Text(" Chats", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }

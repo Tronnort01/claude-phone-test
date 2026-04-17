@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 enum class DashboardTab(val label: String, val kind: String?) {
@@ -74,6 +76,7 @@ data class DashboardState(
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val repository: MonitoringRepository,
     private val apiClient: AgentApiClient,
 ) : ViewModel() {
@@ -112,6 +115,18 @@ class DashboardViewModel @Inject constructor(
     fun sendCommand(type: String) {
         viewModelScope.launch {
             apiClient.sendCommand(repository.deviceId, type)
+        }
+    }
+
+    fun exportJson() {
+        viewModelScope.launch {
+            DataExportHelper.exportAsJson(context, _state.value.allEvents)
+        }
+    }
+
+    fun exportCsv() {
+        viewModelScope.launch {
+            DataExportHelper.exportAsCsv(context, _state.value.allEvents)
         }
     }
 

