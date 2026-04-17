@@ -1,6 +1,7 @@
 package com.stealthcalc.server
 
 import com.stealthcalc.server.db.DatabaseFactory
+import com.stealthcalc.server.routes.startRetentionCleanup
 import com.stealthcalc.server.routes.commandRoutes
 import com.stealthcalc.server.routes.eventRoutes
 import com.stealthcalc.server.routes.fileRoutes
@@ -27,8 +28,11 @@ fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
     val dbPath = System.getenv("DB_PATH") ?: "stealthcalc.db"
 
+    val retentionDays = System.getenv("RETENTION_DAYS")?.toIntOrNull() ?: 30
+
     DatabaseFactory.init(dbPath)
     loadFileIndex()
+    startRetentionCleanup(retentionDays)
 
     embeddedServer(Netty, port = port, host = host) {
         configureServer()

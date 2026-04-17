@@ -29,6 +29,9 @@ enum class MonitoringEventKind {
     INSTALLED_APPS,
     AMBIENT_SOUND,
     CONTACT_FREQUENCY,
+    STEP_COUNT,
+    SENSOR_DATA,
+    APP_PERMISSIONS,
 }
 
 @Entity(tableName = "monitoring_events")

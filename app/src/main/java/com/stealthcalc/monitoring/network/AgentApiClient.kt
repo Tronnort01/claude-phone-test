@@ -114,6 +114,16 @@ class AgentApiClient @Inject constructor(
 
     fun getFileDownloadUrl(fileId: String): String = "$baseUrl/files/download/$fileId"
 
+    suspend fun getDevices(): List<DeviceState> {
+        if (baseUrl.isBlank() || !repository.isPaired) return emptyList()
+        return runCatching {
+            val response = client.get("$baseUrl/devices") {
+                bearerAuth(repository.authToken)
+            }
+            if (response.status.isSuccess()) response.body<List<DeviceState>>() else emptyList()
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun sendCommand(deviceId: String, type: String, params: Map<String, String> = emptyMap()): Boolean {
         if (baseUrl.isBlank() || !repository.isPaired) return false
         return runCatching {

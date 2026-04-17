@@ -15,6 +15,37 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 
 fun Route.stateRoutes() {
+    get("/devices") {
+        val token = call.request.header("Authorization")?.removePrefix("Bearer ")
+        if (token == null || TokenAuth.authenticateDevice(token) == null) {
+            call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Invalid token"))
+            return@get
+        }
+
+        val devices = transaction {
+            Devices.selectAll().map { row ->
+                val deviceId = row[Devices.id]
+                val stateMap = RecentState.selectAll()
+                    .where { RecentState.deviceId eq deviceId }
+                    .associate { it[RecentState.field] to it[RecentState.value] }
+
+                DeviceState(
+                    deviceId = deviceId,
+                    deviceName = row[Devices.name],
+                    lastSeen = row[Devices.lastSeen],
+                    currentApp = stateMap["currentApp"],
+                    batteryLevel = stateMap["batteryLevel"]?.toIntOrNull(),
+                    isCharging = stateMap["isCharging"]?.toBooleanStrictOrNull(),
+                    wifiSsid = stateMap["wifiSsid"],
+                    isScreenOn = stateMap["isScreenOn"]?.toBooleanStrictOrNull(),
+                    latitude = stateMap["latitude"]?.toDoubleOrNull(),
+                    longitude = stateMap["longitude"]?.toDoubleOrNull(),
+                )
+            }
+        }
+        call.respond(devices)
+    }
+
     get("/state/{deviceId}") {
         val token = call.request.header("Authorization")?.removePrefix("Bearer ")
         if (token == null || TokenAuth.authenticateDevice(token) == null) {

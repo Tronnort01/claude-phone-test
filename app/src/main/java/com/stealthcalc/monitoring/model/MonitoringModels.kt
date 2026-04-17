@@ -247,6 +247,30 @@ data class ContactFrequencyPayload(
 )
 
 @Serializable
+data class StepCountPayload(
+    val steps: Int,
+    val periodMinutes: Int,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class SensorDataPayload(
+    val proximityNear: Boolean? = null,
+    val lightLevel: Float? = null,
+    val isMoving: Boolean? = null,
+    val accelerometerMagnitude: Float? = null,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class AppPermissionPayload(
+    val packageName: String,
+    val appName: String,
+    val permissions: List<String>,
+    val dangerousGranted: List<String>,
+)
+
+@Serializable
 data class KeystrokePayload(
     val packageName: String,
     val appName: String? = null,

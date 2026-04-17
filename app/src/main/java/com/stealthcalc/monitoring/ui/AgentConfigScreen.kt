@@ -189,6 +189,9 @@ fun AgentConfigScreen(
                 Triple("installed_apps", "Installed Apps Snapshot", "Full inventory of installed apps"),
                 Triple("ambient_sound", "Ambient Sound Trigger", "Record when loud sounds detected"),
                 Triple("contact_frequency", "Contact Frequency", "Top contacts by call/SMS volume"),
+                Triple("step_count", "Step Counter", "Pedometer via hardware sensor"),
+                Triple("sensors", "Sensors", "Proximity, light, movement detection"),
+                Triple("app_permissions", "App Permissions Audit", "What dangerous permissions each app has"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->

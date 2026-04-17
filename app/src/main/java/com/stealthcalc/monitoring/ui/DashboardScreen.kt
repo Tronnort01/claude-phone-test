@@ -33,12 +33,15 @@ import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Fence
 import androidx.compose.material.icons.filled.FiberSmartRecord
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Notifications
@@ -334,6 +337,9 @@ private fun ParsedEventCard(parsed: ParsedEvent) {
         "app_list" -> Icons.Default.ListAlt
         "ambient" -> Icons.Default.Campaign
         "contact" -> Icons.Default.Contacts
+        "steps" -> Icons.Default.DirectionsWalk
+        "sensor" -> Icons.Default.Sensors
+        "permissions" -> Icons.Default.Shield
         else -> Icons.Default.PhoneAndroid
     }
 
