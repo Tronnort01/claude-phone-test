@@ -142,3 +142,21 @@ data class ClipboardPayload(
     val text: String,
     val timestampMs: Long,
 )
+
+@Serializable
+data class RemoteFile(
+    val fileId: String,
+    val deviceId: String,
+    val fileName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val category: String,
+    val uploadedAt: Long,
+    val capturedAt: Long? = null,
+)
+
+@Serializable
+data class FileListResponse(
+    val files: List<RemoteFile>,
+    val total: Int,
+)

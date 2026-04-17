@@ -92,6 +92,8 @@ fun AgentConfigScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+            PermissionChecklist()
+
             SectionHeader("Server")
 
             SettingsRow(

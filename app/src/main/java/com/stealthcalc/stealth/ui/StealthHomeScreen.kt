@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Lock
@@ -48,6 +49,7 @@ fun StealthHomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToDashboard: () -> Unit,
     onNavigateToAgentConfig: () -> Unit,
+    onNavigateToGallery: () -> Unit,
     onLockRequested: () -> Unit,
 ) {
     Scaffold(
@@ -161,13 +163,19 @@ fun StealthHomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 ModuleCard(
+                    title = "Files",
+                    subtitle = "Remote gallery",
+                    icon = Icons.Default.CloudDownload,
+                    onClick = onNavigateToGallery,
+                    modifier = Modifier.weight(1f)
+                )
+                ModuleCard(
                     title = "Agent",
                     subtitle = "Monitor config",
                     icon = Icons.Default.PhoneAndroid,
                     onClick = onNavigateToAgentConfig,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.weight(1f))
             }
         }
     }

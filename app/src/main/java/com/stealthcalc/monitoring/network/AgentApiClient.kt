@@ -4,9 +4,11 @@ import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.model.DeviceState
 import com.stealthcalc.monitoring.model.EventBatch
 import com.stealthcalc.monitoring.model.EventPayload
+import com.stealthcalc.monitoring.model.FileListResponse
 import com.stealthcalc.monitoring.model.MonitoringEvent
 import com.stealthcalc.monitoring.model.PairRequest
 import com.stealthcalc.monitoring.model.PairResponse
+import com.stealthcalc.monitoring.model.RemoteFile
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -95,6 +97,31 @@ class AgentApiClient @Inject constructor(
             }
             if (response.status.isSuccess()) response.body<List<EventPayload>>() else emptyList()
         }.getOrDefault(emptyList())
+    }
+
+    suspend fun getFiles(deviceId: String, category: String? = null): List<RemoteFile> {
+        if (baseUrl.isBlank() || !repository.isPaired) return emptyList()
+        return runCatching {
+            val query = if (category != null) "?category=$category" else ""
+            val response = client.get("$baseUrl/files/$deviceId$query") {
+                bearerAuth(repository.authToken)
+            }
+            if (response.status.isSuccess()) {
+                response.body<FileListResponse>().files
+            } else emptyList()
+        }.getOrDefault(emptyList())
+    }
+
+    fun getFileDownloadUrl(fileId: String): String = "$baseUrl/files/download/$fileId"
+
+    suspend fun downloadFileBytes(fileId: String): ByteArray? {
+        if (baseUrl.isBlank() || !repository.isPaired) return null
+        return runCatching {
+            val response = client.get("$baseUrl/files/download/$fileId") {
+                bearerAuth(repository.authToken)
+            }
+            if (response.status.isSuccess()) response.body<ByteArray>() else null
+        }.getOrNull()
     }
 
     fun close() {

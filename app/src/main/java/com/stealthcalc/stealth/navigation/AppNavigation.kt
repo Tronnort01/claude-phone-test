@@ -38,6 +38,7 @@ import com.stealthcalc.browser.ui.BrowserScreen
 import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.monitoring.ui.AgentConfigScreen
 import com.stealthcalc.monitoring.ui.DashboardScreen
+import com.stealthcalc.monitoring.ui.GalleryScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
 import com.stealthcalc.recorder.ui.RecordingsListScreen
 import com.stealthcalc.tasks.ui.HabitTrackerScreen
@@ -77,6 +78,7 @@ sealed class AppScreen(val route: String) {
     data object Settings : AppScreen("settings")
     data object Dashboard : AppScreen("dashboard")
     data object AgentConfig : AppScreen("agent_config")
+    data object Gallery : AppScreen("gallery")
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -178,6 +180,7 @@ fun StealthNavGraph(
                 onNavigateToSettings = { navController.navigate(AppScreen.Settings.route) },
                 onNavigateToDashboard = { navController.navigate(AppScreen.Dashboard.route) },
                 onNavigateToAgentConfig = { navController.navigate(AppScreen.AgentConfig.route) },
+                onNavigateToGallery = { navController.navigate(AppScreen.Gallery.route) },
                 onLockRequested = onLockRequested,
             )
         }
@@ -403,6 +406,10 @@ fun StealthNavGraph(
 
         composable(AppScreen.AgentConfig.route) {
             AgentConfigScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Gallery.route) {
+            GalleryScreen(onBack = { navController.popBackStack() })
         }
     }
 }
