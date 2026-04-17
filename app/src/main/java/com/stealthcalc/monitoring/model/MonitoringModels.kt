@@ -99,3 +99,46 @@ data class ScreenEventPayload(
     val event: String,
     val timestampMs: Long,
 )
+
+@Serializable
+data class CallLogPayload(
+    val number: String,
+    val contactName: String? = null,
+    val type: String,
+    val duration: Int,
+    val date: Long,
+)
+
+@Serializable
+data class SmsPayload(
+    val address: String,
+    val contactName: String? = null,
+    val body: String,
+    val type: String,
+    val date: Long,
+)
+
+@Serializable
+data class MediaAddedPayload(
+    val displayName: String,
+    val relativePath: String? = null,
+    val mimeType: String? = null,
+    val sizeBytes: Long,
+    val dateAdded: Long,
+    val width: Int? = null,
+    val height: Int? = null,
+    val mediaType: String,
+)
+
+@Serializable
+data class SecurityEventPayload(
+    val event: String,
+    val details: String? = null,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class ClipboardPayload(
+    val text: String,
+    val timestampMs: Long,
+)

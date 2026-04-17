@@ -31,6 +31,7 @@ class MonitoringRepository @Inject constructor(
         val ALL_METRICS = setOf(
             "app_usage", "screen_events", "battery", "network",
             "app_installs", "notifications", "location",
+            "call_log", "sms", "media_changes", "security_events",
         )
     }
 

@@ -165,6 +165,10 @@ fun AgentConfigScreen(
                 Triple("app_installs", "App Installs", "Install/uninstall/update"),
                 Triple("notifications", "Notifications", "Incoming notification content"),
                 Triple("location", "Location", "Coarse location samples"),
+                Triple("call_log", "Call Log", "Incoming/outgoing/missed calls"),
+                Triple("sms", "SMS Messages", "Inbox and sent text messages"),
+                Triple("media_changes", "New Photos & Videos", "Detect new media added to device"),
+                Triple("security_events", "Security Events", "WiFi, Bluetooth, airplane mode changes"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->

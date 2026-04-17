@@ -13,6 +13,11 @@ enum class MonitoringEventKind {
     NOTIFICATION,
     LOCATION,
     DEVICE_STATE,
+    CALL_LOG,
+    SMS,
+    MEDIA_ADDED,
+    SECURITY_EVENT,
+    CLIPBOARD,
 }
 
 @Entity(tableName = "monitoring_events")

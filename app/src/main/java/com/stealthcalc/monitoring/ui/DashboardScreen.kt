@@ -22,12 +22,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.GetApp
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhonelinkLock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -294,6 +299,11 @@ private fun ParsedEventCard(parsed: ParsedEvent) {
         "screen" -> Icons.Default.PhonelinkLock
         "install" -> Icons.Default.GetApp
         "location" -> Icons.Default.LocationOn
+        "call" -> Icons.Default.Call
+        "sms" -> Icons.Default.Sms
+        "media" -> Icons.Default.Image
+        "security" -> Icons.Default.Security
+        "clipboard" -> Icons.Default.ContentCopy
         else -> Icons.Default.PhoneAndroid
     }
 

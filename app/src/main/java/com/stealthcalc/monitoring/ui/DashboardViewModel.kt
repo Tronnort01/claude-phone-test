@@ -23,9 +23,13 @@ enum class DashboardTab(val label: String, val kind: String?) {
     ALL("All", null),
     APPS("Apps", "APP_USAGE"),
     NOTIFICATIONS("Notifs", "NOTIFICATION"),
+    CALLS("Calls", "CALL_LOG"),
+    SMS("SMS", "SMS"),
+    MEDIA("Media", "MEDIA_ADDED"),
     BATTERY("Battery", "BATTERY"),
     NETWORK("Network", "NETWORK"),
     SCREEN("Screen", "SCREEN_EVENT"),
+    SECURITY("Security", "SECURITY_EVENT"),
     LOCATION("Location", "LOCATION"),
     INSTALLS("Installs", "APP_INSTALL"),
 }
@@ -189,6 +193,41 @@ class DashboardViewModel @Inject constructor(
                 val lon = obj?.get("longitude")?.jsonPrimitive?.content ?: "?"
                 val acc = obj?.get("accuracy")?.jsonPrimitive?.content ?: "?"
                 ParsedEvent(event, "Location: $lat, $lon", "Accuracy: ${acc}m", "location")
+            }
+            "CALL_LOG" -> {
+                val number = obj?.get("number")?.jsonPrimitive?.content ?: ""
+                val name = obj?.get("contactName")?.jsonPrimitive?.content
+                val type = obj?.get("type")?.jsonPrimitive?.content ?: ""
+                val duration = obj?.get("duration")?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                val display = name ?: number
+                val durationStr = if (duration > 0) " (${duration / 60}m${duration % 60}s)" else ""
+                ParsedEvent(event, "${type.lowercase().replaceFirstChar { it.uppercase() }} call: $display$durationStr", "", "call")
+            }
+            "SMS" -> {
+                val address = obj?.get("address")?.jsonPrimitive?.content ?: ""
+                val name = obj?.get("contactName")?.jsonPrimitive?.content
+                val body = obj?.get("body")?.jsonPrimitive?.content ?: ""
+                val type = obj?.get("type")?.jsonPrimitive?.content ?: ""
+                val display = name ?: address
+                val prefix = if (type == "SENT") "To" else "From"
+                ParsedEvent(event, "$prefix $display", body, "sms")
+            }
+            "MEDIA_ADDED" -> {
+                val name = obj?.get("displayName")?.jsonPrimitive?.content ?: ""
+                val mType = obj?.get("mediaType")?.jsonPrimitive?.content ?: ""
+                val size = obj?.get("sizeBytes")?.jsonPrimitive?.content?.toLongOrNull() ?: 0
+                val sizeStr = if (size > 1_000_000) "${size / 1_000_000}MB" else "${size / 1000}KB"
+                ParsedEvent(event, "New $mType: $name", sizeStr, "media")
+            }
+            "SECURITY_EVENT" -> {
+                val secEvent = obj?.get("event")?.jsonPrimitive?.content ?: ""
+                val details = obj?.get("details")?.jsonPrimitive?.content ?: ""
+                val label = secEvent.lowercase().replace("_", " ").replaceFirstChar { it.uppercase() }
+                ParsedEvent(event, label, details, "security")
+            }
+            "CLIPBOARD" -> {
+                val text = obj?.get("text")?.jsonPrimitive?.content ?: ""
+                ParsedEvent(event, "Clipboard copied", text.take(100), "clipboard")
             }
             else -> ParsedEvent(event, event.kind, event.payload.take(80), "unknown")
         }
