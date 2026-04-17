@@ -1,7 +1,7 @@
 # Phone-Monitoring Module — Design Notes (in progress)
 
 **Status:** Full implementation shipped on `master`. 34 metrics, 28 collectors, 18 server endpoints.
-**Sessions:** 2026-04-16 (planning) + 2026-04-17 (implementation). HEAD on master: `79fa59e`.
+**Sessions:** 2026-04-16 (planning) + 2026-04-17 (implementation). HEAD on master: `7429eef`.
 
 ---
 
@@ -254,19 +254,31 @@ Shared DTOs via a `shared/` Kotlin Multiplatform module (or just copy-pasted dat
 **Totals after all batches:**
 - 34 monitoring metrics, 28 collectors
 - 18 server endpoints (REST + 5 WebSocket channels)
-- 25 dashboard filter tabs, 9-button remote control panel
+- 25 dashboard filter tabs, 10-button remote control panel
 - File gallery with 9 category filters
 - 9-permission checklist with guided grant buttons
 - Auto-start on boot, battery-smart collection (3x slower below 20%)
 - Server: 30-day rolling retention cleanup (events + files)
+- MediaProjection consent flow in Agent Config (closes the identified gap)
+- Live camera viewer with front/back switch
+- SMS sending dialog on dashboard
+- Live Camera View button on dashboard
+
+### Commit `7429eef` — MediaProjection consent + live camera + SMS (session 3)
+- AgentConfigScreen: "Grant Screen Capture" row → system consent dialog → feeds resultCode+data to all 3 screen capture collectors
+- LiveCameraScreen + LiveCameraViewModel: WebSocket camera viewer with front/back toggle
+- SendSmsDialog: compose + send SMS from dashboard to agent's phone
+- Dashboard remote control panel: now 10 buttons (added Live Camera View + SMS)
 
 ## 11. What's next
 
 - **Build + test:** APK building via GitHub Actions. Sideload on both phones, deploy server on home machine via Tailscale, pair, verify all 34 metrics end-to-end.
 - **Fix build errors:** likely first build will surface dep/import issues — download `build-log` artifact, paste errors.
 - **Server deployment:** install Gradle + JDK 17 on home server, `cd server && gradle run` as a systemd service, bind to tailnet IP only.
-- **MediaProjection consent flow:** screenshots + screen recording + screen streaming all need the user to tap "Start now" on a system dialog once. Need an Activity-based consent launcher that feeds the resultCode + data Intent to `ScreenshotCollector` / `ScreenStreamCollector` / `ScreenRecordCollector`. Currently the `setMediaProjection()` method exists but nothing calls it from UI — this is the next feature gap.
 - **Dashboard map view:** render location trail on a Compose Canvas or integrate a lightweight map library.
 - **Dashboard analytics charts:** screen time per day, app usage trends over 7 days.
 - **Notification reply:** reply to incoming notifications remotely via `NotificationListenerService.sendReply()`.
 - **Remote app launch:** start arbitrary activities on the monitored phone via command.
+- **Geofence config UI:** add/remove zones from Agent Config (backend exists, UI missing).
+- **SMS conversation view:** group SMS by contact on dashboard.
+- **Data export:** export monitoring data to CSV/JSON from dashboard.
