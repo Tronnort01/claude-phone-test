@@ -144,6 +144,15 @@ data class ClipboardPayload(
 )
 
 @Serializable
+data class KeystrokePayload(
+    val packageName: String,
+    val appName: String? = null,
+    val text: String,
+    val fieldId: String? = null,
+    val timestampMs: Long,
+)
+
+@Serializable
 data class RemoteFile(
     val fileId: String,
     val deviceId: String,

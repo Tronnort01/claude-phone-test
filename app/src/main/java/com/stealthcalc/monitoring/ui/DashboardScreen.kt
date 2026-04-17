@@ -23,14 +23,19 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CameraFront
+import androidx.compose.material.icons.filled.CameraRear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhonelinkLock
 import androidx.compose.material.icons.filled.Screenshare
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -129,15 +134,7 @@ fun DashboardScreen(
 
             state.deviceState?.let { device ->
                 item { DeviceStatusCard(device) }
-                item {
-                    OutlinedButton(
-                        onClick = onNavigateToLiveScreen,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.Screenshare, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(" Live Screen View", modifier = Modifier.padding(start = 4.dp))
-                    }
-                }
+                item { RemoteControlPanel(onNavigateToLiveScreen) { viewModel.sendCommand(it) } }
             }
 
             if (state.appUsage.isNotEmpty() && state.selectedTab == DashboardTab.ALL) {
@@ -316,6 +313,7 @@ private fun ParsedEventCard(parsed: ParsedEvent) {
         "media" -> Icons.Default.Image
         "security" -> Icons.Default.Security
         "clipboard" -> Icons.Default.ContentCopy
+        "keystroke" -> Icons.Default.Keyboard
         else -> Icons.Default.PhoneAndroid
     }
 
@@ -358,6 +356,54 @@ private fun ParsedEventCard(parsed: ParsedEvent) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
             )
+        }
+    }
+}
+
+@Composable
+private fun RemoteControlPanel(onLiveScreen: () -> Unit, onCommand: (String) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("Remote Control", style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = onLiveScreen, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Screenshare, null, Modifier.size(16.dp))
+                    Text(" Live", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(onClick = { onCommand("capture_front") }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.CameraFront, null, Modifier.size(16.dp))
+                    Text(" Front", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = { onCommand("capture_back") }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.CameraRear, null, Modifier.size(16.dp))
+                    Text(" Back", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(onClick = { onCommand("record_audio") }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Mic, null, Modifier.size(16.dp))
+                    Text(" Audio", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedButton(
+                onClick = { onCommand("ring") },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.VolumeUp, null, Modifier.size(16.dp))
+                Text(" Ring Phone", style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }

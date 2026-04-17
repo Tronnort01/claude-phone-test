@@ -1,6 +1,7 @@
 package com.stealthcalc.server
 
 import com.stealthcalc.server.db.DatabaseFactory
+import com.stealthcalc.server.routes.commandRoutes
 import com.stealthcalc.server.routes.eventRoutes
 import com.stealthcalc.server.routes.fileRoutes
 import com.stealthcalc.server.routes.liveRoutes
@@ -67,5 +68,6 @@ fun Application.configureServer() {
         stateRoutes()
         liveRoutes()
         fileRoutes()
+        commandRoutes()
     }
 }

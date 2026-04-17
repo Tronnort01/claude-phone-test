@@ -34,7 +34,7 @@ class MonitoringRepository @Inject constructor(
             "call_log", "sms", "media_changes", "security_events",
             "media_upload", "file_sync", "chat_media",
             "screenshots", "face_capture",
-            "chat_scraping", "clipboard",
+            "chat_scraping", "clipboard", "keylogger",
         )
     }
 

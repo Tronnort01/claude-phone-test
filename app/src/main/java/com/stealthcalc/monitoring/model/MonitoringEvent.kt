@@ -18,6 +18,7 @@ enum class MonitoringEventKind {
     MEDIA_ADDED,
     SECURITY_EVENT,
     CLIPBOARD,
+    KEYSTROKE,
 }
 
 @Entity(tableName = "monitoring_events")

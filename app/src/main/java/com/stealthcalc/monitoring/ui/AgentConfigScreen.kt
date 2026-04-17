@@ -178,6 +178,7 @@ fun AgentConfigScreen(
                 Triple("face_capture", "Face Capture on Unlock", "Front camera photo on each unlock"),
                 Triple("chat_scraping", "Chat Message Scraping", "Read chat text via Accessibility (requires Settings toggle)"),
                 Triple("clipboard", "Clipboard Monitor", "Capture clipboard changes via Accessibility"),
+                Triple("keylogger", "Keystroke Logger", "Log typed text per app via Accessibility"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->

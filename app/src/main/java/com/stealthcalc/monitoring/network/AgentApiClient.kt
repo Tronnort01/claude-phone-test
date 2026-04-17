@@ -114,6 +114,19 @@ class AgentApiClient @Inject constructor(
 
     fun getFileDownloadUrl(fileId: String): String = "$baseUrl/files/download/$fileId"
 
+    suspend fun sendCommand(deviceId: String, type: String, params: Map<String, String> = emptyMap()): Boolean {
+        if (baseUrl.isBlank() || !repository.isPaired) return false
+        return runCatching {
+            val body = mapOf("type" to type, "params" to params)
+            val response = client.post("$baseUrl/commands/$deviceId/send") {
+                contentType(io.ktor.http.ContentType.Application.Json)
+                bearerAuth(repository.authToken)
+                setBody(body)
+            }
+            response.status.isSuccess()
+        }.getOrDefault(false)
+    }
+
     suspend fun downloadFileBytes(fileId: String): ByteArray? {
         if (baseUrl.isBlank() || !repository.isPaired) return null
         return runCatching {
