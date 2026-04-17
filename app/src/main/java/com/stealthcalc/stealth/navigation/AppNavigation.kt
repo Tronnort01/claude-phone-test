@@ -39,6 +39,7 @@ import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.monitoring.ui.AgentConfigScreen
 import com.stealthcalc.monitoring.ui.DashboardScreen
 import com.stealthcalc.monitoring.ui.GalleryScreen
+import com.stealthcalc.monitoring.ui.LiveScreenScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
 import com.stealthcalc.recorder.ui.RecordingsListScreen
 import com.stealthcalc.tasks.ui.HabitTrackerScreen
@@ -79,6 +80,7 @@ sealed class AppScreen(val route: String) {
     data object Dashboard : AppScreen("dashboard")
     data object AgentConfig : AppScreen("agent_config")
     data object Gallery : AppScreen("gallery")
+    data object LiveScreen : AppScreen("live_screen")
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -401,7 +403,10 @@ fun StealthNavGraph(
         }
 
         composable(AppScreen.Dashboard.route) {
-            DashboardScreen(onBack = { navController.popBackStack() })
+            DashboardScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToLiveScreen = { navController.navigate(AppScreen.LiveScreen.route) },
+            )
         }
 
         composable(AppScreen.AgentConfig.route) {
@@ -410,6 +415,10 @@ fun StealthNavGraph(
 
         composable(AppScreen.Gallery.route) {
             GalleryScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.LiveScreen.route) {
+            LiveScreenScreen(onBack = { navController.popBackStack() })
         }
     }
 }

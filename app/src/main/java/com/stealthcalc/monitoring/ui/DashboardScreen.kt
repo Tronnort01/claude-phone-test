@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhonelinkLock
+import androidx.compose.material.icons.filled.Screenshare
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sms
@@ -63,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun DashboardScreen(
     onBack: () -> Unit,
+    onNavigateToLiveScreen: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -126,6 +129,15 @@ fun DashboardScreen(
 
             state.deviceState?.let { device ->
                 item { DeviceStatusCard(device) }
+                item {
+                    OutlinedButton(
+                        onClick = onNavigateToLiveScreen,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Screenshare, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(" Live Screen View", modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
             }
 
             if (state.appUsage.isNotEmpty() && state.selectedTab == DashboardTab.ALL) {
