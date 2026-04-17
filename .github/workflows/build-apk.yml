@@ -36,10 +36,14 @@ jobs:
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
+      # NOTE: do NOT set `continue-on-error: true` here. Combined with `if: success()`
+      # on the upload step, it masks gradle failures and produces green runs with
+      # no APK artifact. GitHub Actions' default bash is `-eo pipefail`, so pipe
+      # failures (gradle exiting non-zero through tee) correctly fail the step.
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build-output.txt
-        continue-on-error: true
 
+      # Always upload the log so failures remain diagnosable.
       - name: Upload build log (always)
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,7 +51,23 @@ jobs:
           name: build-log
           path: build-output.txt
           retention-days: 7
+          if-no-files-found: warn
 
+      # Diagnostic: list what's actually in the APK output dir. Cheap, and
+      # surfaces path drift (e.g. AGP renames, applicationIdSuffix, etc.)
+      # if the upload step later fails.
+      - name: List APK outputs
+        if: success()
+        run: |
+          echo "--- app/build/outputs/apk/debug/ ---"
+          ls -la app/build/outputs/apk/debug/ || true
+          echo "--- any app-debug*.apk anywhere under app/build ---"
+          find app/build -name 'app-debug*.apk' -print || true
+
+      # if-no-files-found: error — if assembleDebug succeeds but the APK isn't
+      # where we expect, fail loudly instead of silently uploading an empty
+      # artifact. This is the rule from docs/ANDROID_BUILD_LESSONS.md
+      # "Pre-push Checklist".
       - name: Upload APK (on success)
         if: success()
         uses: actions/upload-artifact@v4
@@ -55,10 +75,4 @@ jobs:
           name: StealthCalc-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
-
-      - name: Fail if build failed
-        run: |
-          if grep -q "BUILD FAILED" build-output.txt; then
-            echo "Build failed — check build-log artifact for errors"
-            exit 1
-          fi
+          if-no-files-found: error

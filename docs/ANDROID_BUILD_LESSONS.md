@@ -181,6 +181,7 @@ Bridge from ViewModel to Compose launcher: expose `StateFlow<IntentSender?>` fro
 | Error | Cause | Fix |
 |---|---|---|
 | Build succeeds but no APK artifact appears | `upload-artifact@v4` default `if-no-files-found: warn` — silently succeeds when no file matches | Set `if-no-files-found: error` on the APK upload step |
+| Green run, but APK missing AND `Fail if build failed` never tripped | `continue-on-error: true` on the gradle step + `if: success()` on the upload step is a footgun. `continue-on-error` sets the step `conclusion` to "success" even when `outcome` is "failure"; `success()` reads `conclusion`; both "build passed" and "build silently failed" end up in the same branch. With default `if-no-files-found: warn` the upload step then silently produces an empty artifact. | Either (a) drop `continue-on-error: true` — `-eo pipefail` is on by default on Actions bash so gradle's non-zero propagates through `\| tee` and fails the step correctly, OR (b) keep `continue-on-error: true` AND set `if-no-files-found: error` on the APK upload so it fails loud when there's nothing to upload. Don't rely on a trailing `grep "BUILD FAILED"` step to catch this — by then the artifact slot is already filled with nothing. |
 | Build log stored as `.log` — not openable on mobile | File extension affects default handler on phones | Use `build.txt` (or `build-output.txt`) as the log file name |
 | Workflow only runs on feature branch, not master | `on.push.branches` list too narrow | Include `master` (and any backup branches) in the trigger |
 
@@ -208,10 +209,13 @@ jobs:
       - run: |
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
+      # No continue-on-error: the default bash has `-eo pipefail`, so gradle's
+      # non-zero exit propagates through `| tee` and the step fails correctly.
+      # Pairing continue-on-error with `if: success()` is a footgun — see the
+      # Build / Workflow table above.
       - run: ./gradlew assembleDebug --stacktrace 2>&1 | tee build-output.txt
-        continue-on-error: true
       - name: Upload build log
-        if: always()
+        if: always()  # `always()` runs even if the previous step failed.
         uses: actions/upload-artifact@v4
         with:
           name: build-log
@@ -223,14 +227,8 @@ jobs:
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          if-no-files-found: error  # Fail loud if the APK isn't where we expect.
           retention-days: 30
-      - name: Fail if build failed
-        run: |
-          if grep -q "BUILD FAILED" build-output.txt; then
-            echo "Build failed — check build-log artifact for errors"
-            exit 1
-          fi
 ```
 
 ---
