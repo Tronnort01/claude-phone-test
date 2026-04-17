@@ -42,6 +42,9 @@ import com.stealthcalc.monitoring.ui.DashboardScreen
 import com.stealthcalc.monitoring.ui.EventSearchScreen
 import com.stealthcalc.monitoring.ui.GalleryScreen
 import com.stealthcalc.monitoring.ui.GeofenceConfigScreen
+import com.stealthcalc.monitoring.ui.NotificationHistoryScreen
+import com.stealthcalc.monitoring.ui.QrPairingScreen
+import com.stealthcalc.monitoring.ui.ScheduleConfigScreen
 import com.stealthcalc.monitoring.ui.SmsConversationScreen
 import com.stealthcalc.monitoring.ui.LiveCameraScreen
 import com.stealthcalc.monitoring.ui.LiveScreenScreen
@@ -91,6 +94,9 @@ sealed class AppScreen(val route: String) {
     data object Analytics : AppScreen("analytics")
     data object SmsConversations : AppScreen("sms_conversations")
     data object EventSearch : AppScreen("event_search")
+    data object NotificationHistory : AppScreen("notification_history")
+    data object QrPairing : AppScreen("qr_pairing")
+    data object ScheduleConfig : AppScreen("schedule_config")
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -427,6 +433,9 @@ fun StealthNavGraph(
             AgentConfigScreen(
                 onBack = { navController.popBackStack() },
                 onNavigateToGeofence = { navController.navigate(AppScreen.GeofenceConfig.route) },
+                onNavigateToQrPairing = { navController.navigate(AppScreen.QrPairing.route) },
+                onNavigateToSchedule = { navController.navigate(AppScreen.ScheduleConfig.route) },
+                onNavigateToNotifHistory = { navController.navigate(AppScreen.NotificationHistory.route) },
             )
         }
 
@@ -456,6 +465,18 @@ fun StealthNavGraph(
 
         composable(AppScreen.EventSearch.route) {
             EventSearchScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.NotificationHistory.route) {
+            NotificationHistoryScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.QrPairing.route) {
+            QrPairingScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.ScheduleConfig.route) {
+            ScheduleConfigScreen(onBack = { navController.popBackStack() })
         }
     }
 }

@@ -9,6 +9,7 @@ import com.stealthcalc.server.routes.liveRoutes
 import com.stealthcalc.server.routes.loadFileIndex
 import com.stealthcalc.server.routes.pairingRoutes
 import com.stealthcalc.server.routes.stateRoutes
+import com.stealthcalc.server.routes.webDashboardRoutes
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -73,5 +74,6 @@ fun Application.configureServer() {
         liveRoutes()
         fileRoutes()
         commandRoutes()
+        webDashboardRoutes()
     }
 }

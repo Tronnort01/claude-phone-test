@@ -39,7 +39,7 @@ class MonitoringRepository @Inject constructor(
             "device_info", "data_usage", "calendar",
             "geofence", "installed_apps", "ambient_sound",
             "contact_frequency", "step_count", "sensors",
-            "app_permissions",
+            "app_permissions", "wifi_alerts", "contact_changes",
         )
     }
 

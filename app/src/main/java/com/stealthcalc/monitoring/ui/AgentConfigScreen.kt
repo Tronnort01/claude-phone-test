@@ -54,6 +54,9 @@ import com.stealthcalc.monitoring.data.MonitoringRepository
 fun AgentConfigScreen(
     onBack: () -> Unit,
     onNavigateToGeofence: () -> Unit = {},
+    onNavigateToQrPairing: () -> Unit = {},
+    onNavigateToSchedule: () -> Unit = {},
+    onNavigateToNotifHistory: () -> Unit = {},
     viewModel: AgentConfigViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -170,6 +173,12 @@ fun AgentConfigScreen(
                     onClick = viewModel::showOtpDialog,
                     trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
                 )
+                SettingsRow(
+                    title = "Pair via QR Code",
+                    subtitle = "Generate a QR code for easy pairing",
+                    onClick = onNavigateToQrPairing,
+                    trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+                )
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -233,6 +242,8 @@ fun AgentConfigScreen(
                 Triple("step_count", "Step Counter", "Pedometer via hardware sensor"),
                 Triple("sensors", "Sensors", "Proximity, light, movement detection"),
                 Triple("app_permissions", "App Permissions Audit", "What dangerous permissions each app has"),
+                Triple("wifi_alerts", "WiFi Network Alerts", "Alert on unknown/new WiFi networks"),
+                Triple("contact_changes", "Contact Changes", "Detect when contacts are added or removed"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->
@@ -246,12 +257,26 @@ fun AgentConfigScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            SectionHeader("Geofencing")
+            SectionHeader("Schedule & Zones")
 
             SettingsRow(
-                title = "Configure Zones",
+                title = "Collection Schedule",
+                subtitle = "Set active hours and days for data collection",
+                onClick = onNavigateToSchedule,
+                trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+            )
+
+            SettingsRow(
+                title = "Geofence Zones",
                 subtitle = "Add or remove geofence zones",
                 onClick = onNavigateToGeofence,
+                trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+            )
+
+            SettingsRow(
+                title = "Notification History",
+                subtitle = "Browse notifications grouped by app",
+                onClick = onNavigateToNotifHistory,
                 trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
             )
 
