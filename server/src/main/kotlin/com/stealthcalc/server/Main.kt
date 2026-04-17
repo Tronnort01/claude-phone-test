@@ -2,7 +2,9 @@ package com.stealthcalc.server
 
 import com.stealthcalc.server.db.DatabaseFactory
 import com.stealthcalc.server.routes.eventRoutes
+import com.stealthcalc.server.routes.fileRoutes
 import com.stealthcalc.server.routes.liveRoutes
+import com.stealthcalc.server.routes.loadFileIndex
 import com.stealthcalc.server.routes.pairingRoutes
 import com.stealthcalc.server.routes.stateRoutes
 import io.ktor.serialization.kotlinx.json.*
@@ -25,6 +27,7 @@ fun main() {
     val dbPath = System.getenv("DB_PATH") ?: "stealthcalc.db"
 
     DatabaseFactory.init(dbPath)
+    loadFileIndex()
 
     embeddedServer(Netty, port = port, host = host) {
         configureServer()
@@ -63,5 +66,6 @@ fun Application.configureServer() {
         eventRoutes()
         stateRoutes()
         liveRoutes()
+        fileRoutes()
     }
 }

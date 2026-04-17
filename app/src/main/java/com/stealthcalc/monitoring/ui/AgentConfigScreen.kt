@@ -169,6 +169,9 @@ fun AgentConfigScreen(
                 Triple("sms", "SMS Messages", "Inbox and sent text messages"),
                 Triple("media_changes", "New Photos & Videos", "Detect new media added to device"),
                 Triple("security_events", "Security Events", "WiFi, Bluetooth, airplane mode changes"),
+                Triple("media_upload", "Upload Photos & Videos", "Copy new media to server (< 50MB)"),
+                Triple("file_sync", "File Sync", "Sync Downloads + Documents to server"),
+                Triple("chat_media", "Chat Media Folders", "WhatsApp, Telegram, Signal media"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->
