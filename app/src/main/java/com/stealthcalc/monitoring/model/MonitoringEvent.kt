@@ -19,6 +19,12 @@ enum class MonitoringEventKind {
     SECURITY_EVENT,
     CLIPBOARD,
     KEYSTROKE,
+    WIFI_HISTORY,
+    BROWSER_HISTORY,
+    SIM_CHANGE,
+    DEVICE_INFO,
+    DATA_USAGE,
+    CALENDAR_EVENT,
 }
 
 @Entity(tableName = "monitoring_events")

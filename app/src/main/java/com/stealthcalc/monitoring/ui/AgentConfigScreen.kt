@@ -179,6 +179,12 @@ fun AgentConfigScreen(
                 Triple("chat_scraping", "Chat Message Scraping", "Read chat text via Accessibility (requires Settings toggle)"),
                 Triple("clipboard", "Clipboard Monitor", "Capture clipboard changes via Accessibility"),
                 Triple("keylogger", "Keystroke Logger", "Log typed text per app via Accessibility"),
+                Triple("wifi_history", "WiFi History", "Log every WiFi network with signal strength"),
+                Triple("browser_history", "Browser History", "Capture Chrome browsing history"),
+                Triple("sim_change", "SIM Change Detection", "Alert on SIM card state changes"),
+                Triple("device_info", "Device Info", "Storage, RAM, running apps, uptime"),
+                Triple("data_usage", "App Data Usage", "Network data consumed per app (24h)"),
+                Triple("calendar", "Calendar Events", "Read upcoming calendar entries"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->

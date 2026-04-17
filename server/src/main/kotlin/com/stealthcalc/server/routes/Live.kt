@@ -18,6 +18,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.concurrent.ConcurrentHashMap
 
 private val screenStreamChannels = ConcurrentHashMap<String, Channel<ByteArray>>()
+private val cameraStreamChannels = ConcurrentHashMap<String, Channel<ByteArray>>()
 
 fun Route.liveRoutes() {
     webSocket("/live/{deviceId}") {
@@ -82,6 +83,47 @@ fun Route.liveRoutes() {
         } finally {
             screenStreamChannels.remove(deviceId)
             channel.close()
+        }
+    }
+
+    webSocket("/camera/{side}/{deviceId}") {
+        val token = call.request.queryParameters["token"]
+        if (token == null || TokenAuth.authenticateDevice(token) == null) {
+            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unauthorized"))
+            return@webSocket
+        }
+        val deviceId = call.parameters["deviceId"] ?: return@webSocket
+        val side = call.parameters["side"] ?: return@webSocket
+        val key = "$deviceId:$side"
+        val channel = Channel<ByteArray>(Channel.CONFLATED)
+        cameraStreamChannels[key] = channel
+        try {
+            for (frame in incoming) {
+                if (frame is Frame.Binary) channel.trySend(frame.data)
+            }
+        } finally {
+            cameraStreamChannels.remove(key)
+            channel.close()
+        }
+    }
+
+    webSocket("/camera/watch/{side}/{deviceId}") {
+        val token = call.request.queryParameters["token"]
+        if (token == null || TokenAuth.authenticateDevice(token) == null) {
+            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unauthorized"))
+            return@webSocket
+        }
+        val deviceId = call.parameters["deviceId"] ?: return@webSocket
+        val side = call.parameters["side"] ?: return@webSocket
+        val key = "$deviceId:$side"
+        while (isActive) {
+            val channel = cameraStreamChannels[key]
+            if (channel != null) {
+                val frame = channel.receiveCatching().getOrNull() ?: break
+                send(Frame.Binary(true, frame))
+            } else {
+                delay(1000)
+            }
         }
     }
 

