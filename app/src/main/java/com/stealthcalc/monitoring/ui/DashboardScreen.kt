@@ -69,6 +69,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,6 +87,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun DashboardScreen(
     onBack: () -> Unit,
     onNavigateToLiveScreen: () -> Unit = {},
+    onNavigateToLiveCamera: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -147,7 +151,7 @@ fun DashboardScreen(
 
             state.deviceState?.let { device ->
                 item { DeviceStatusCard(device) }
-                item { RemoteControlPanel(onNavigateToLiveScreen) { viewModel.sendCommand(it) } }
+                item { RemoteControlPanel(onNavigateToLiveScreen, onNavigateToLiveCamera, viewModel) }
             }
 
             if (state.appUsage.isNotEmpty() && state.selectedTab == DashboardTab.ALL) {
@@ -386,8 +390,16 @@ private fun ParsedEventCard(parsed: ParsedEvent) {
     }
 }
 
+import androidx.compose.material.icons.filled.Message
+
 @Composable
-private fun RemoteControlPanel(onLiveScreen: () -> Unit, onCommand: (String) -> Unit) {
+private fun RemoteControlPanel(
+    onLiveScreen: () -> Unit,
+    onLiveCamera: () -> Unit,
+    viewModel: DashboardViewModel,
+) {
+    val onCommand: (String) -> Unit = { viewModel.sendCommand(it) }
+    var showSmsDialog by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -445,14 +457,38 @@ private fun RemoteControlPanel(onLiveScreen: () -> Unit, onCommand: (String) -> 
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = { onCommand("ring") }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.VolumeUp, null, Modifier.size(16.dp))
+                    Text(" Ring", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(onClick = { showSmsDialog = true }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Message, null, Modifier.size(16.dp))
+                    Text(" SMS", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
             OutlinedButton(
-                onClick = { onCommand("ring") },
+                onClick = onLiveCamera,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Default.VolumeUp, null, Modifier.size(16.dp))
-                Text(" Ring Phone", style = MaterialTheme.typography.labelSmall)
+                Icon(Icons.Default.CameraFront, null, Modifier.size(16.dp))
+                Text(" Live Camera View", style = MaterialTheme.typography.labelSmall)
             }
         }
+    }
+
+    if (showSmsDialog) {
+        SendSmsDialog(
+            onSend = { to, body ->
+                viewModel.sendSms(to, body)
+                showSmsDialog = false
+            },
+            onDismiss = { showSmsDialog = false }
+        )
     }
 }
 

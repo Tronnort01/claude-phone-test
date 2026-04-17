@@ -39,6 +39,7 @@ import com.stealthcalc.browser.ui.LinkVaultScreen
 import com.stealthcalc.monitoring.ui.AgentConfigScreen
 import com.stealthcalc.monitoring.ui.DashboardScreen
 import com.stealthcalc.monitoring.ui.GalleryScreen
+import com.stealthcalc.monitoring.ui.LiveCameraScreen
 import com.stealthcalc.monitoring.ui.LiveScreenScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
 import com.stealthcalc.recorder.ui.RecordingsListScreen
@@ -81,6 +82,7 @@ sealed class AppScreen(val route: String) {
     data object AgentConfig : AppScreen("agent_config")
     data object Gallery : AppScreen("gallery")
     data object LiveScreen : AppScreen("live_screen")
+    data object LiveCamera : AppScreen("live_camera")
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -406,6 +408,7 @@ fun StealthNavGraph(
             DashboardScreen(
                 onBack = { navController.popBackStack() },
                 onNavigateToLiveScreen = { navController.navigate(AppScreen.LiveScreen.route) },
+                onNavigateToLiveCamera = { navController.navigate(AppScreen.LiveCamera.route) },
             )
         }
 
@@ -419,6 +422,10 @@ fun StealthNavGraph(
 
         composable(AppScreen.LiveScreen.route) {
             LiveScreenScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.LiveCamera.route) {
+            LiveCameraScreen(onBack = { navController.popBackStack() })
         }
     }
 }

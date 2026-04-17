@@ -115,6 +115,12 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun sendSms(to: String, body: String) {
+        viewModelScope.launch {
+            apiClient.sendCommand(repository.deviceId, "send_sms", mapOf("to" to to, "body" to body))
+        }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
