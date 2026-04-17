@@ -33,6 +33,7 @@ class MonitoringRepository @Inject constructor(
             "app_installs", "notifications", "location",
             "call_log", "sms", "media_changes", "security_events",
             "media_upload", "file_sync", "chat_media",
+            "screenshots", "face_capture",
         )
     }
 
