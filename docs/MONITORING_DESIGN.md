@@ -1,7 +1,7 @@
 # Phone-Monitoring Module — Design Notes (in progress)
 
-**Status:** MVP implementation complete. Agent module + server shipped on branch `claude/plan-app-monitoring-W0UKj`.
-**Session:** 2026-04-16 — planning + implementation. Commits: `c6e902e` (agent module), `6196955` (server).
+**Status:** Full implementation shipped on `master`. 34 metrics, 28 collectors, 18 server endpoints.
+**Sessions:** 2026-04-16 (planning) + 2026-04-17 (implementation). HEAD on master: `79fa59e`.
 
 ---
 
@@ -236,11 +236,37 @@ Shared DTOs via a `shared/` Kotlin Multiplatform module (or just copy-pasted dat
 
 **Total metrics now tracked: 18** (app_usage, screen_events, battery, network, app_installs, notifications, location, call_log, sms, media_changes, security_events, media_upload, file_sync, chat_media, screenshots, face_capture, chat_scraping, clipboard)
 
+### Commits `fc09981`..`79fa59e` — Extended monitoring (2026-04-17, session 2)
+
+8 batches shipped directly on `master`:
+
+1. **`fc09981`** — Call log, SMS, media detection, security events (4 collectors)
+2. **`eee6f84`** — File transfer infra + media/file/chat-media upload (server + agent)
+3. **`d30918e`** — Screenshot capture (MediaProjection) + face capture on unlock (Camera2)
+4. **`f156260`** — AccessibilityService for chat scraping + clipboard monitoring
+5. **`254b9d9`** — Remote file gallery + 9-permission grant helper
+6. **`7d4ee18`** — Live screen streaming via WebSocket
+7. **`3709a4c`** — Keylogger + remote camera/audio + command system
+8. **`422a46f`** — WiFi history, browser history, SIM change, device info, data usage, calendar, live camera stream
+9. **`5f8fc62`** — Geofencing, installed apps, ambient sound, screen recording, contact frequency, auto-start on boot
+10. **`79fa59e`** — Step counter, sensors, app permissions, remote SMS, battery-smart intervals, server retention cleanup, multi-device
+
+**Totals after all batches:**
+- 34 monitoring metrics, 28 collectors
+- 18 server endpoints (REST + 5 WebSocket channels)
+- 25 dashboard filter tabs, 9-button remote control panel
+- File gallery with 9 category filters
+- 9-permission checklist with guided grant buttons
+- Auto-start on boot, battery-smart collection (3x slower below 20%)
+- Server: 30-day rolling retention cleanup (events + files)
+
 ## 11. What's next
 
-- **On-device testing:** build APK, sideload, pair with server, verify all 18 metrics end-to-end.
-- **Server deployment:** systemd service on home server, bind to tailnet interface.
-- **Dashboard gallery view:** browse uploaded photos/videos/screenshots/face captures from server.
-- **Live screen streaming:** WebSocket binary frames from MediaProjection for real-time view.
-- **Event retention policy:** server-side cron to prune old events + files.
-- **Permission grant helper:** Agent Config UI should guide user through each special permission (Usage access, Notification access, Accessibility, MANAGE_EXTERNAL_STORAGE, MediaProjection consent).
+- **Build + test:** APK building via GitHub Actions. Sideload on both phones, deploy server on home machine via Tailscale, pair, verify all 34 metrics end-to-end.
+- **Fix build errors:** likely first build will surface dep/import issues — download `build-log` artifact, paste errors.
+- **Server deployment:** install Gradle + JDK 17 on home server, `cd server && gradle run` as a systemd service, bind to tailnet IP only.
+- **MediaProjection consent flow:** screenshots + screen recording + screen streaming all need the user to tap "Start now" on a system dialog once. Need an Activity-based consent launcher that feeds the resultCode + data Intent to `ScreenshotCollector` / `ScreenStreamCollector` / `ScreenRecordCollector`. Currently the `setMediaProjection()` method exists but nothing calls it from UI — this is the next feature gap.
+- **Dashboard map view:** render location trail on a Compose Canvas or integrate a lightweight map library.
+- **Dashboard analytics charts:** screen time per day, app usage trends over 7 days.
+- **Notification reply:** reply to incoming notifications remotely via `NotificationListenerService.sendReply()`.
+- **Remote app launch:** start arbitrary activities on the monitored phone via command.
