@@ -271,4 +271,31 @@ The current `catch (_: Exception) {}` silently swallows the failure.
 - All Hilt injections resolve at compile time; the `@HiltAndroidApp` on `StealthCalcApp` is present.
 - `FileEncryptionService.saveThumbnail()` DOES generate and save encrypted thumbnails at import — the problem is only the UI-side decryption.
 - `EncryptedSharedPreferences` works (it's what `SecretCodeManager` reads) — the bug is that `setSecretCode()` is never called, not that the store is broken.
+
+---
+
+## Round 8 — Feature additions (2026-04-20)
+
+**Branch:** `claude/round8-features-bYw2Y` → merged to `master` (commit `b19bcb0`)
+**No new bugs found.** All items below are new features, not regressions.
+
+| # | Feature | Status |
+|---|---------|--------|
+| R8-1 | AMOLED dark theme (true-black Settings toggle) | ✅ Shipped |
+| R8-2 | App icon switcher (Calculator / Clock / Notes via `activity-alias`) | ✅ Shipped |
+| R8-3 | Biometric-only unlock (long-press `=`) | ✅ Shipped |
+| R8-4 | Shake sensitivity tuning (15/25/35 m/s² picker in Settings) | ✅ Shipped |
+| R8-5 | Clipboard timeout config (15s/30s/1m/5m/Never) | ✅ Shipped |
+| R8-6 | Recording cascade delete | ✅ Already done (Round 4) |
+| R8-7 | Thumbnail regeneration (broken-image toolbar button) | ✅ Shipped |
+| R8-8 | OCR on photos (ML Kit text recognition + copy dialog) | ✅ Shipped |
+| R8-9 | Remote lock agent (`lock_device` command → `DevicePolicyManager.lockNow()`) | ✅ Shipped |
+| R8-10 | Scheduled silent windows (agent collection gated by schedule prefs) | ✅ Shipped |
+| R8-11 | Custom browser user agent (GeckoView UA override) | ✅ Shipped |
+| R8-12 | Decoy PIN with vault wipe | ✅ Shipped |
+| R8-13/14 | Browser save page to vault (URL stub encryption) | ✅ Shipped |
+| R8-15 | Remote wipe (`wipe_vault` command → `WipeManager.wipeAll()`) | ✅ Shipped |
+| R8-16 | Timeline view (hourly event grouping, `TimelineScreen`) | ✅ Shipped |
+
+See `docs/ROUND8_FEATURES.md` for full implementation detail.
 - `MediaRecorder` in `RecorderService` does successfully write output files — they just land in app-private storage unencrypted, not in the vault.

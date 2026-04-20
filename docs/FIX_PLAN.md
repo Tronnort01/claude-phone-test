@@ -396,3 +396,28 @@ APK artifact name: `StealthCalc-debug`.
 - Panic-handler tuning.
 - Biometric unlock (`BiometricHelper.kt` exists; not reported broken).
 - Browser fixes.
+
+---
+
+## Round 8 — Feature Plan & Execution (2026-04-20)
+
+**Branch:** `claude/round8-features-bYw2Y` → merged to `master`
+**Scope:** 16 new features across Tier 1 (10 items) and Tier 2 (6 items). No Notes/Tasks changes.
+
+| # | Feature | Approach | Deviation / Notes |
+|---|---------|----------|-------------------|
+| R8-1 | AMOLED theme | `darkColorScheme()` with `Color(0xFF000000)` background; toggled in Settings | Reads pref once at `setContent`; live update deferred to next cold start (standard Android pattern) |
+| R8-2 | App icon switcher | `<activity-alias>` in manifest + `PackageManager.setComponentEnabledSetting` | 3 aliases: Calculator (default), Clock (blue `#1565C0`), Notes (green `#2E7D32`). `@ApplicationContext` added to `SettingsViewModel` |
+| R8-3 | Biometric long-press `=` | `combinedClickable` on `=` key; `AppRoot` passes `biometricHelper` callback | `BiometricHelper` updated from `FragmentActivity` → `ComponentActivity` for `biometric:1.2.0-alpha05` |
+| R8-4 | Shake sensitivity | Prefs-backed computed property on `PanicHandler.shakeThreshold` | Reads prefs on every sensor check; no service restart needed |
+| R8-5 | Clipboard timeout | `SecureClipboard.scheduleAutoClear()` reads pref; `-1L` = never | `copy()` and `copyWithLabel()` both trigger auto-clear |
+| R8-6 | Recording cascade delete | — | Already implemented Round 4; no work needed |
+| R8-7 | Thumbnail regen | New `FileEncryptionService.regenerateThumbnail()` + `VaultDao.updateThumbnailPath()` | Currently PHOTO type only; VIDEO regen deferred |
+| R8-8 | OCR on photos | ML Kit `TextRecognition` on `workingBitmap`; result dialog with Copy | New dep `com.google.mlkit:text-recognition:16.0.1` |
+| R8-9 | Remote lock | `RemoteCommandHandler`: `lock_device` → `DevicePolicyManager.lockNow()` | Falls back to log if no active admin |
+| R8-10 | Scheduled windows | `AgentService.isWithinSchedule()` reads prefs directly | `ScheduleConfigViewModel` keys duplicated; can't inject ViewModel into Service |
+| R8-11 | Browser UA | `GeckoRuntimeSettings.Builder.userAgentOverride(...)` in `BrowserScreen` | Single-line change |
+| R8-12 | Decoy wipe | `CalculatorViewModel` calls `WipeManager.wipeAll()` on `DecoyValid` result if pref set | Wipe runs before `DecoyUnlocked` return; user sees empty vault |
+| R8-13/14 | Save page to vault | `BrowserViewModel.savePageToVault()` writes URL+title stub as encrypted text | Full MHTML download deferred — GeckoView 123 download delegate API too version-specific |
+| R8-15 | Remote wipe | `RemoteCommandHandler`: `wipe_vault` → `WipeManager.wipeAll()` | Dashboard confirmation dialog guards accidental wipe |
+| R8-16 | Timeline view | New `TimelineScreen` + `TimelineViewModel`; last 500 events grouped by hour | Wired from Dashboard alongside existing Map button |
