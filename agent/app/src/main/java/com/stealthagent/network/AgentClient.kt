@@ -6,10 +6,13 @@ import com.stealthagent.model.EventPayload
 import com.stealthagent.model.MonitoringEvent
 import com.stealthagent.model.PairRequest
 import com.stealthagent.model.PairResponse
+import com.stealthagent.model.CommandRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
@@ -21,6 +24,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,7 +36,10 @@ class AgentClient @Inject constructor(
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val client: HttpClient by lazy {
-        HttpClient(OkHttp) { install(ContentNegotiation) { json(json) } }
+        HttpClient(OkHttp) {
+            install(ContentNegotiation) { json(json) }
+            install(WebSockets)
+        }
     }
 
     private fun getBaseUrl(): String {
@@ -84,6 +92,22 @@ class AgentClient @Inject constructor(
             }
             response.status.isSuccess()
         }.getOrDefault(false)
+    }
+
+    suspend fun listenForCommands(onCommand: (CommandRequest) -> Unit) {
+        val base = getBaseUrl()
+        if (base.isBlank() || !repository.isPaired) return
+        val wsBase = base.replace("https://", "wss://").replace("http://", "ws://")
+        client.webSocket("$wsBase/commands/${repository.deviceId}?token=${repository.authToken}") {
+            for (frame in incoming) {
+                if (frame is Frame.Text) {
+                    runCatching {
+                        val cmd = json.decodeFromString<CommandRequest>(frame.readText())
+                        onCommand(cmd)
+                    }
+                }
+            }
+        }
     }
 
     suspend fun uploadFile(

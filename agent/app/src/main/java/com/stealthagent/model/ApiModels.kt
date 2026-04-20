@@ -13,3 +13,6 @@ data class PairRequest(val otp: String, val deviceName: String)
 
 @Serializable
 data class PairResponse(val deviceId: String, val token: String)
+
+@Serializable
+data class CommandRequest(val type: String, val params: Map<String, String> = emptyMap())

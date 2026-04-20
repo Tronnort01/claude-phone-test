@@ -54,4 +54,9 @@ class AgentRepository @Inject constructor(
         dao.deleteUploadedBefore(System.currentTimeMillis() - maxAgeMs)
     }
     suspend fun unsentCount() = dao.unsentCount()
+
+    suspend fun wipe() {
+        dao.deleteAll()
+        prefs.edit().clear().apply()
+    }
 }

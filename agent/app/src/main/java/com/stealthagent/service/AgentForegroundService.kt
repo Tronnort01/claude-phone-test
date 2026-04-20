@@ -3,10 +3,12 @@ package com.stealthagent.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.media.RingtoneManager
 import android.os.BatteryManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -14,6 +16,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.stealthagent.collector.AllCollectors
 import com.stealthagent.data.AgentRepository
+import com.stealthagent.model.CommandRequest
 import com.stealthagent.network.AgentClient
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -48,6 +51,7 @@ class AgentForegroundService : LifecycleService() {
 
     private var collectJob: Job? = null
     private var uploadJob: Job? = null
+    private var commandJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
@@ -60,6 +64,7 @@ class AgentForegroundService : LifecycleService() {
         isRunning = true
         startCollectLoop()
         startUploadLoop()
+        startCommandLoop()
         return START_STICKY
     }
 
@@ -92,6 +97,43 @@ class AgentForegroundService : LifecycleService() {
         }
     }
 
+    private fun startCommandLoop() {
+        commandJob?.cancel()
+        commandJob = lifecycleScope.launch {
+            while (isActive) {
+                if (repository.isPaired) {
+                    runCatching {
+                        client.listenForCommands { cmd -> handleCommand(cmd) }
+                    }
+                }
+                delay(5_000) // reconnect backoff
+            }
+        }
+    }
+
+    private fun handleCommand(cmd: CommandRequest) {
+        when (cmd.type) {
+            "lock_device" -> lockDevice()
+            "wipe_vault" -> lifecycleScope.launch {
+                repository.wipe()
+                stopSelf()
+            }
+            "ring" -> ringDevice()
+        }
+    }
+
+    private fun lockDevice() {
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+        if (dpm?.activeAdmins?.isNotEmpty() == true) runCatching { dpm.lockNow() }
+    }
+
+    private fun ringDevice() {
+        runCatching {
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            RingtoneManager.getRingtone(applicationContext, uri)?.play()
+        }
+    }
+
     private fun getInterval(): Long {
         val bi = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = bi?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
@@ -101,7 +143,11 @@ class AgentForegroundService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        isRunning = false; collectJob?.cancel(); uploadJob?.cancel(); super.onDestroy()
+        isRunning = false
+        collectJob?.cancel()
+        uploadJob?.cancel()
+        commandJob?.cancel()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent): IBinder? { super.onBind(intent); return null }
