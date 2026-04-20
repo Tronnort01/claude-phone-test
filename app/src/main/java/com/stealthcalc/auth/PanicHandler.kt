@@ -1,30 +1,40 @@
 package com.stealthcalc.auth
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import com.stealthcalc.core.di.EncryptedPrefs
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.sqrt
 
-/**
- * Detects shake gestures to trigger panic lock (instant return to calculator).
- * Also tracks rapid back-press (3x in 2 seconds).
- */
 @Singleton
 class PanicHandler @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    @EncryptedPrefs private val prefs: SharedPreferences,
 ) {
+    companion object {
+        const val KEY_SHAKE_THRESHOLD = "panic_shake_threshold"
+        const val DEFAULT_SHAKE_THRESHOLD = 25f
+    }
+
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
     private var onPanic: (() -> Unit)? = null
 
     private var lastShakeTime: Long = 0
-    private val shakeThreshold = 25f // m/s²
+    var shakeThreshold: Float
+        get() = prefs.getFloat(KEY_SHAKE_THRESHOLD, DEFAULT_SHAKE_THRESHOLD)
+        private set(value) { prefs.edit().putFloat(KEY_SHAKE_THRESHOLD, value).apply() }
     private val shakeCooldownMs = 1000L
+
+    fun setShakeThreshold(value: Float) {
+        prefs.edit().putFloat(KEY_SHAKE_THRESHOLD, value).apply()
+    }
 
     private val backPressTimes = mutableListOf<Long>()
     private val backPressWindowMs = 2000L

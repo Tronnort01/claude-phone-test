@@ -14,6 +14,8 @@ import androidx.lifecycle.viewModelScope
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.vault.data.VaultRepository
 import com.stealthcalc.vault.service.FileEncryptionService
@@ -43,6 +45,8 @@ data class PhotoEditorState(
     val contrast: Float = 1f,
     val saturation: Float = 1f,
     val isRemovingBackground: Boolean = false,
+    val isExtractingText: Boolean = false,
+    val extractedText: String? = null,
 )
 
 @HiltViewModel
@@ -181,6 +185,26 @@ class PhotoEditorViewModel @Inject constructor(
             }
         }
     }
+
+    fun extractText() {
+        val src = workingBitmap ?: return
+        _state.update { it.copy(isExtractingText = true, extractedText = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val inputImage = InputImage.fromBitmap(src, 0)
+                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                val result = recognizer.process(inputImage).await()
+                val text = result.text.ifBlank { "(No text found)" }
+                recognizer.close()
+                _state.update { it.copy(isExtractingText = false, extractedText = text) }
+            }.onFailure { e ->
+                AppLogger.log(context, "[vault]", "OCR error: ${e.message}")
+                _state.update { it.copy(isExtractingText = false, error = "OCR failed: ${e.message}") }
+            }
+        }
+    }
+
+    fun clearExtractedText() { _state.update { it.copy(extractedText = null) } }
 
     fun clearError() { _state.update { it.copy(error = null) } }
 }

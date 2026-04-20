@@ -99,6 +99,34 @@
             </intent-filter>
         </activity>
 
+        <!-- App icon alias: Clock disguise (blue icon) -->
+        <activity-alias
+            android:name=".MainActivityClockAlias"
+            android:targetActivity=".MainActivity"
+            android:label="@string/alias_name_clock"
+            android:icon="@mipmap/ic_launcher_clock"
+            android:exported="true"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- App icon alias: Notes disguise (green icon) -->
+        <activity-alias
+            android:name=".MainActivityNotesAlias"
+            android:targetActivity=".MainActivity"
+            android:label="@string/alias_name_notes"
+            android:icon="@mipmap/ic_launcher_notes"
+            android:exported="true"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <service
             android:name=".recorder.service.RecorderService"
             android:exported="false"

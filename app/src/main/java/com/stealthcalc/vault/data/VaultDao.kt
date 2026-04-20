@@ -123,6 +123,9 @@ interface VaultDao {
     @Query("UPDATE vault_files SET fileName = :name WHERE id = :id")
     suspend fun renameFile(id: String, name: String)
 
+    @Query("UPDATE vault_files SET thumbnailPath = :thumbPath WHERE id = :id")
+    suspend fun updateThumbnailPath(id: String, thumbPath: String)
+
     @Query("SELECT SUM(fileSizeBytes) FROM vault_files")
     fun getTotalSize(): Flow<Long?>
 

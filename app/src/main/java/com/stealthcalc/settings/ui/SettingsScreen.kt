@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -335,6 +336,15 @@ fun SettingsScreen(
                     subtitle = "A second PIN opens a fake empty vault",
                     onClick = {},
                 )
+                SettingsToggle(
+                    title = "Wipe on Decoy PIN",
+                    subtitle = if (state.isDecoyWipeEnabled)
+                        "On — entering decoy PIN silently wipes all vault data first"
+                    else
+                        "Off — decoy PIN just shows an empty vault",
+                    checked = state.isDecoyWipeEnabled,
+                    onToggle = { viewModel.setDecoyWipeEnabled(!state.isDecoyWipeEnabled) }
+                )
                 SettingsRow(
                     title = "Disable Decoy PIN",
                     subtitle = "Remove the decoy PIN",
@@ -362,12 +372,146 @@ fun SettingsScreen(
                 onToggle = viewModel::togglePanicShake
             )
 
+            if (state.isPanicShakeEnabled) {
+                var showShakePicker by remember { mutableStateOf(false) }
+                SettingsRow(
+                    title = "Shake Sensitivity",
+                    subtitle = viewModel.shakeThresholdOptions.find { it.first == state.shakeThreshold }?.second
+                        ?: "Medium (25 m/s²)",
+                    onClick = { showShakePicker = true },
+                    trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+                )
+                if (showShakePicker) {
+                    AlertDialog(
+                        onDismissRequest = { showShakePicker = false },
+                        title = { Text("Shake Sensitivity") },
+                        text = {
+                            Column {
+                                viewModel.shakeThresholdOptions.forEach { (threshold, label) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.setShakeThreshold(threshold); showShakePicker = false }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = state.shakeThreshold == threshold,
+                                            onClick = { viewModel.setShakeThreshold(threshold); showShakePicker = false }
+                                        )
+                                        Text(label, modifier = Modifier.padding(start = 8.dp))
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showShakePicker = false }) { Text("Cancel") }
+                        }
+                    )
+                }
+            }
+
             SettingsToggle(
                 title = "Triple-Back to Lock",
                 subtitle = "Press back 3 times rapidly to lock",
                 checked = state.isPanicBackEnabled,
                 onToggle = viewModel::togglePanicBack
             )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // --- Appearance section ---
+            SectionHeader("Appearance")
+
+            SettingsToggle(
+                title = "AMOLED Dark Theme",
+                subtitle = if (state.isAmoledEnabled)
+                    "On — true black background (saves battery on OLED screens)"
+                else
+                    "Off — use default dark theme",
+                checked = state.isAmoledEnabled,
+                onToggle = { viewModel.setAmoledEnabled(!state.isAmoledEnabled) }
+            )
+
+            var showIconPicker by remember { mutableStateOf(false) }
+            SettingsRow(
+                title = "App Icon / Disguise",
+                subtitle = viewModel.iconAliasOptions.find { it.first == state.activeIconAlias }?.second
+                    ?: "Calculator (default)",
+                onClick = { showIconPicker = true },
+                trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+            )
+            if (showIconPicker) {
+                AlertDialog(
+                    onDismissRequest = { showIconPicker = false },
+                    title = { Text("App Icon") },
+                    text = {
+                        Column {
+                            viewModel.iconAliasOptions.forEach { (alias, label) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { viewModel.switchAppIcon(alias); showIconPicker = false }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = state.activeIconAlias == alias,
+                                        onClick = { viewModel.switchAppIcon(alias); showIconPicker = false }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showIconPicker = false }) { Text("Close") }
+                    }
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // --- Privacy section ---
+            SectionHeader("Privacy")
+
+            var showClipboardPicker by remember { mutableStateOf(false) }
+            SettingsRow(
+                title = "Clipboard Auto-Clear",
+                subtitle = viewModel.clipboardTimeoutOptions.find { it.first == state.clipboardTimeoutMs }?.second
+                    ?: "30 seconds",
+                onClick = { showClipboardPicker = true },
+                trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+            )
+            if (showClipboardPicker) {
+                AlertDialog(
+                    onDismissRequest = { showClipboardPicker = false },
+                    title = { Text("Clipboard Auto-Clear") },
+                    text = {
+                        Column {
+                            viewModel.clipboardTimeoutOptions.forEach { (ms, label) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { viewModel.setClipboardTimeout(ms); showClipboardPicker = false }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = state.clipboardTimeoutMs == ms,
+                                        onClick = { viewModel.setClipboardTimeout(ms); showClipboardPicker = false }
+                                    )
+                                    Text(label, modifier = Modifier.padding(start = 8.dp))
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showClipboardPicker = false }) { Text("Cancel") }
+                    }
+                )
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 

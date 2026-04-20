@@ -52,6 +52,9 @@ import androidx.compose.material.icons.filled.PhonelinkLock
 import androidx.compose.material.icons.filled.Screenshare
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sms
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.filled.Refresh
@@ -96,6 +99,7 @@ fun DashboardScreen(
     onNavigateToSmsConversations: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToMap: () -> Unit = {},
+    onNavigateToTimeline: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -167,12 +171,24 @@ fun DashboardScreen(
                 item { DeviceStatusCard(device) }
                 item { RemoteControlPanel(onNavigateToLiveScreen, onNavigateToLiveCamera, onNavigateToSmsConversations, viewModel) }
                 item {
-                    OutlinedButton(
-                        onClick = onNavigateToMap,
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Default.Map, null, Modifier.size(16.dp))
-                        Text("  View Location Map", style = MaterialTheme.typography.labelSmall)
+                        OutlinedButton(
+                            onClick = onNavigateToMap,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.Map, null, Modifier.size(16.dp))
+                            Text("  Map", style = MaterialTheme.typography.labelSmall)
+                        }
+                        OutlinedButton(
+                            onClick = onNavigateToTimeline,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.Timeline, null, Modifier.size(16.dp))
+                            Text("  Timeline", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
@@ -506,6 +522,43 @@ private fun RemoteControlPanel(
                 OutlinedButton(onClick = onSmsConversations, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Sms, null, Modifier.size(16.dp))
                     Text(" Chats", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = { onCommand("lock_device") }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Lock, null, Modifier.size(16.dp))
+                    Text(" Lock", style = MaterialTheme.typography.labelSmall)
+                }
+                var showWipeConfirm by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = { showWipeConfirm = true },
+                    modifier = Modifier.weight(1f),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        contentColor = androidx.compose.material3.MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(Icons.Default.DeleteForever, null, Modifier.size(16.dp))
+                    Text(" Wipe", style = MaterialTheme.typography.labelSmall)
+                }
+                if (showWipeConfirm) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showWipeConfirm = false },
+                        title = { Text("Wipe Agent Vault?") },
+                        text = { Text("This will permanently delete all vault data on the agent device. This cannot be undone.") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                onCommand("wipe_vault")
+                                showWipeConfirm = false
+                            }) { Text("Wipe", color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { showWipeConfirm = false }) { Text("Cancel") }
+                        }
+                    )
                 }
             }
         }

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -235,6 +236,9 @@ fun VaultScreen(
                                     if (state.isGridView) Icons.Default.ViewList else Icons.Default.GridView,
                                     contentDescription = "Toggle view"
                                 )
+                            }
+                            IconButton(onClick = viewModel::regenerateThumbnails) {
+                                Icon(Icons.Default.BrokenImage, contentDescription = "Regenerate thumbnails")
                             }
                         }
                     },

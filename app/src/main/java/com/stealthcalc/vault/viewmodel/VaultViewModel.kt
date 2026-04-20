@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -421,6 +422,21 @@ class VaultViewModel @Inject constructor(
 
     fun moveToFolder(fileId: String, folderId: String?) {
         viewModelScope.launch { repository.moveToFolder(fileId, folderId) }
+    }
+
+    fun regenerateThumbnails() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val allFiles = repository.getFiles().first()
+                allFiles.filter { it.thumbnailPath == null || !java.io.File(it.thumbnailPath).exists() }
+                    .forEach { vf ->
+                        val newThumb = encryptionService.regenerateThumbnail(vf)
+                        if (newThumb != null) {
+                            repository.updateThumbnailPath(vf.id, newThumb)
+                        }
+                    }
+            }
+        }
     }
 
     /**

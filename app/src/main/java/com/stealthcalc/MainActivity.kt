@@ -90,12 +90,14 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            StealthCalcTheme {
+            val useAmoled = encryptedPrefs.getBoolean(SettingsViewModel.KEY_AMOLED_ENABLED, false)
+            StealthCalcTheme(useAmoled = useAmoled) {
                 AppRoot(
                     isStealthUnlocked = isStealthVisible,
                     onStealthUnlocked = { autoLockManager.unlock() },
                     onLockRequested = { autoLockManager.lock() },
                     secretCodeManager = secretCodeManager,
+                    biometricHelper = biometricHelper,
                 )
             }
         }

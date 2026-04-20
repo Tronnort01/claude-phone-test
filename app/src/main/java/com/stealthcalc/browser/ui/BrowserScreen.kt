@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Refresh
@@ -118,6 +119,8 @@ fun BrowserScreen(
             .webManifest(false)
             .consoleOutput(false)
             .crashHandler(null)
+            // Spoof as Chrome on Android to avoid GeckoView fingerprinting
+            .userAgentOverride("Mozilla/5.0 (Linux; Android 14; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
             .build()
 
         GeckoRuntime.create(context, settings)
@@ -333,6 +336,9 @@ fun BrowserScreen(
                 }
                 IconButton(onClick = viewModel::showSaveDialog) {
                     Icon(Icons.Default.BookmarkBorder, contentDescription = "Save Link")
+                }
+                IconButton(onClick = { viewModel.savePageToVault() }) {
+                    Icon(Icons.Default.SaveAlt, contentDescription = "Save page to vault")
                 }
                 IconButton(onClick = onNavigateToVault) {
                     Icon(Icons.Default.Bookmark, contentDescription = "Link Vault")

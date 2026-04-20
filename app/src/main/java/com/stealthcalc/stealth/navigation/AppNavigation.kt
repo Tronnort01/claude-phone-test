@@ -15,6 +15,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navigation
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalContext
+import com.stealthcalc.auth.BiometricHelper
 import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.auth.ui.SetupScreen
 import com.stealthcalc.calculator.ui.CalculatorScreen
@@ -49,6 +52,7 @@ import com.stealthcalc.monitoring.ui.SmsConversationScreen
 import com.stealthcalc.monitoring.ui.LiveCameraScreen
 import com.stealthcalc.monitoring.ui.LiveScreenScreen
 import com.stealthcalc.monitoring.ui.LocationMapScreen
+import com.stealthcalc.monitoring.ui.TimelineScreen
 import com.stealthcalc.vault.ui.PhotoEditorScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
 import com.stealthcalc.recorder.ui.RecordingsListScreen
@@ -100,6 +104,7 @@ sealed class AppScreen(val route: String) {
     data object QrPairing : AppScreen("qr_pairing")
     data object ScheduleConfig : AppScreen("schedule_config")
     data object LocationMap : AppScreen("location_map")
+    data object Timeline : AppScreen("timeline")
     data object PhotoEditor : AppScreen("photo_editor/{fileId}") {
         fun createRoute(fileId: String) = "photo_editor/$fileId"
     }
@@ -113,11 +118,14 @@ fun AppRoot(
     onStealthUnlocked: () -> Unit,
     onLockRequested: () -> Unit,
     secretCodeManager: SecretCodeManager,
+    biometricHelper: BiometricHelper,
 ) {
     var showSetup by remember { mutableStateOf(false) }
     var setupCandidateCode by remember { mutableStateOf("") }
     var activeSecretPin by remember { mutableStateOf("") }
     var isDecoyMode by remember { mutableStateOf(false) }
+
+    val activity = LocalContext.current as? ComponentActivity
 
     AnimatedContent(
         targetState = when {
@@ -149,7 +157,19 @@ fun AppRoot(
                             }
                             SecretCodeResult.None -> {}
                         }
-                    }
+                    },
+                    onLongPressEquals = {
+                        if (biometricHelper.canUseBiometric() && activity != null) {
+                            biometricHelper.showBiometricPrompt(
+                                activity = activity,
+                                onSuccess = { _ ->
+                                    isDecoyMode = false
+                                    onStealthUnlocked()
+                                },
+                                onFailure = {}
+                            )
+                        }
+                    },
                 )
             }
             ScreenState.Setup -> {
@@ -436,6 +456,7 @@ fun StealthNavGraph(
                 onNavigateToSmsConversations = { navController.navigate(AppScreen.SmsConversations.route) },
                 onNavigateToSearch = { navController.navigate(AppScreen.EventSearch.route) },
                 onNavigateToMap = { navController.navigate(AppScreen.LocationMap.route) },
+                onNavigateToTimeline = { navController.navigate(AppScreen.Timeline.route) },
             )
         }
 
@@ -491,6 +512,10 @@ fun StealthNavGraph(
 
         composable(AppScreen.LocationMap.route) {
             LocationMapScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.Timeline.route) {
+            TimelineScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

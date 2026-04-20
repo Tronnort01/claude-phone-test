@@ -112,4 +112,6 @@ dependencies {
 
     // ML Kit subject segmentation — background removal in photo editor
     implementation(libs.mlkit.subject.segmentation)
+    // ML Kit text recognition — OCR on vault photos
+    implementation(libs.mlkit.text.recognition)
 }

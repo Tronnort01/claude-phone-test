@@ -1,10 +1,13 @@
 package com.stealthcalc.calculator.viewmodel
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import com.stealthcalc.auth.IntruderSelfieManager
 import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.auth.WipeManager
 import com.stealthcalc.calculator.engine.CalcEngine
+import com.stealthcalc.core.di.EncryptedPrefs
+import com.stealthcalc.settings.viewmodel.SettingsViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +44,7 @@ class CalculatorViewModel @Inject constructor(
     private val secretCodeManager: SecretCodeManager,
     private val intruderSelfieManager: IntruderSelfieManager,
     private val wipeManager: WipeManager,
+    @EncryptedPrefs private val prefs: SharedPreferences,
 ) : ViewModel() {
 
     private val engine = CalcEngine()
@@ -140,6 +144,9 @@ class CalculatorViewModel @Inject constructor(
                     performCalculation()
                     val code = codeCandidate
                     inputBuffer.clear()
+                    if (prefs.getBoolean(SettingsViewModel.KEY_DECOY_WIPE_ENABLED, false)) {
+                        wipeManager.wipeAll()
+                    }
                     return SecretCodeResult.DecoyUnlocked(code)
                 }
                 is SecretCodeManager.ValidationResult.NotSetup -> {

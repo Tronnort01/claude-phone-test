@@ -1,10 +1,9 @@
 package com.stealthcalc.auth
 
 import android.content.SharedPreferences
+import androidx.activity.ComponentActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import com.stealthcalc.core.di.EncryptedPrefs
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,7 +49,7 @@ class BiometricHelper @Inject constructor(
         sessionPin = null
     }
 
-    fun isBiometricAvailable(activity: FragmentActivity): Boolean {
+    fun isBiometricAvailable(activity: ComponentActivity): Boolean {
         val biometricManager = BiometricManager.from(activity)
         return biometricManager.canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -58,7 +57,7 @@ class BiometricHelper @Inject constructor(
     }
 
     fun showBiometricPrompt(
-        activity: FragmentActivity,
+        activity: ComponentActivity,
         onSuccess: (pin: String) -> Unit,
         onFailure: () -> Unit
     ) {
@@ -66,8 +65,6 @@ class BiometricHelper @Inject constructor(
             onFailure()
             return
         }
-
-        val executor = ContextCompat.getMainExecutor(activity)
 
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -95,6 +92,6 @@ class BiometricHelper @Inject constructor(
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .build()
 
-        BiometricPrompt(activity, executor, callback).authenticate(promptInfo)
+        BiometricPrompt(activity, callback).authenticate(promptInfo)
     }
 }

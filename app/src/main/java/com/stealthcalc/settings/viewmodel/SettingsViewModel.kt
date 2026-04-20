@@ -1,11 +1,16 @@
 package com.stealthcalc.settings.viewmodel
 
+import android.content.ComponentName
+import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stealthcalc.auth.AutoLockManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.stealthcalc.auth.BiometricHelper
 import com.stealthcalc.auth.IntruderSelfieManager
+import com.stealthcalc.auth.PanicHandler
 import com.stealthcalc.auth.SecretCodeManager
 import com.stealthcalc.auth.WipeManager
 import com.stealthcalc.core.di.EncryptedPrefs
@@ -32,12 +37,17 @@ data class SettingsState(
     val isScreenshotBlocked: Boolean = true,
     val isBiometricEnabled: Boolean = false,
     val isDecoyEnabled: Boolean = false,
+    val isDecoyWipeEnabled: Boolean = false,
     val isOverlayLockEnabled: Boolean = false,
     val useRealLockDuringRecording: Boolean = true,
     val useBlackScreenLock: Boolean = false,
     val isIntruderSelfieEnabled: Boolean = false,
     val isAutoWipeEnabled: Boolean = false,
     val autoWipeThreshold: Int = WipeManager.DEFAULT_WIPE_THRESHOLD,
+    val isAmoledEnabled: Boolean = false,
+    val shakeThreshold: Float = PanicHandler.DEFAULT_SHAKE_THRESHOLD,
+    val clipboardTimeoutMs: Long = 30_000L,
+    val activeIconAlias: String = "default",
     // Change code
     val showChangeCodeDialog: Boolean = false,
     val changeCodeError: String? = null,
@@ -53,9 +63,11 @@ class SettingsViewModel @Inject constructor(
     private val biometricHelper: BiometricHelper,
     private val intruderSelfieManager: IntruderSelfieManager,
     private val wipeManager: WipeManager,
+    private val panicHandler: PanicHandler,
     private val vaultRepository: VaultRepository,
     private val encryptionService: FileEncryptionService,
-    @EncryptedPrefs private val prefs: SharedPreferences
+    @EncryptedPrefs private val prefs: SharedPreferences,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     companion object {
@@ -65,6 +77,13 @@ class SettingsViewModel @Inject constructor(
         const val KEY_OVERLAY_LOCK_ENABLED = "overlay_lock_enabled"
         const val KEY_USE_REAL_LOCK_DURING_RECORDING = "use_real_lock_during_recording"
         const val KEY_BLACK_SCREEN_LOCK = "black_screen_lock_enabled"
+        const val KEY_AMOLED_ENABLED = "amoled_theme_enabled"
+        const val KEY_DECOY_WIPE_ENABLED = "decoy_wipe_enabled"
+        const val KEY_CLIPBOARD_TIMEOUT_MS = "clipboard_timeout_ms"
+        private const val KEY_ACTIVE_ICON = "active_icon_alias"
+        const val ALIAS_DEFAULT = "default"
+        const val ALIAS_CLOCK = "clock"
+        const val ALIAS_NOTES = "notes"
     }
 
     private val _state = MutableStateFlow(
@@ -75,12 +94,17 @@ class SettingsViewModel @Inject constructor(
             isScreenshotBlocked = prefs.getBoolean(KEY_SCREENSHOT_BLOCKED, true),
             isBiometricEnabled = biometricHelper.isBiometricEnabled,
             isDecoyEnabled = secretCodeManager.isDecoyEnabled,
+            isDecoyWipeEnabled = prefs.getBoolean(KEY_DECOY_WIPE_ENABLED, false),
             isOverlayLockEnabled = prefs.getBoolean(KEY_OVERLAY_LOCK_ENABLED, false),
             useRealLockDuringRecording = prefs.getBoolean(KEY_USE_REAL_LOCK_DURING_RECORDING, true),
             useBlackScreenLock = prefs.getBoolean(KEY_BLACK_SCREEN_LOCK, false),
             isIntruderSelfieEnabled = intruderSelfieManager.isEnabled,
             isAutoWipeEnabled = wipeManager.isAutoWipeEnabled,
             autoWipeThreshold = wipeManager.autoWipeThreshold,
+            isAmoledEnabled = prefs.getBoolean(KEY_AMOLED_ENABLED, false),
+            shakeThreshold = panicHandler.shakeThreshold,
+            clipboardTimeoutMs = prefs.getLong(KEY_CLIPBOARD_TIMEOUT_MS, 30_000L),
+            activeIconAlias = prefs.getString(KEY_ACTIVE_ICON, ALIAS_DEFAULT) ?: ALIAS_DEFAULT,
         )
     )
     val state: StateFlow<SettingsState> = _state.asStateFlow()
@@ -113,6 +137,75 @@ class SettingsViewModel @Inject constructor(
     fun setAutoWipeThreshold(threshold: Int) {
         wipeManager.setAutoWipeThreshold(threshold)
         _state.update { it.copy(autoWipeThreshold = threshold) }
+    }
+
+    fun setAmoledEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AMOLED_ENABLED, enabled).apply()
+        _state.update { it.copy(isAmoledEnabled = enabled) }
+    }
+
+    fun setDecoyWipeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DECOY_WIPE_ENABLED, enabled).apply()
+        _state.update { it.copy(isDecoyWipeEnabled = enabled) }
+    }
+
+    val shakeThresholdOptions = listOf(
+        15f to "Low (15 m/s²) — sensitive",
+        25f to "Medium (25 m/s²) — default",
+        35f to "High (35 m/s²) — hard shake",
+    )
+
+    fun setShakeThreshold(threshold: Float) {
+        panicHandler.setShakeThreshold(threshold)
+        _state.update { it.copy(shakeThreshold = threshold) }
+    }
+
+    val clipboardTimeoutOptions = listOf(
+        15_000L to "15 seconds",
+        30_000L to "30 seconds",
+        60_000L to "1 minute",
+        300_000L to "5 minutes",
+        -1L to "Never",
+    )
+
+    fun setClipboardTimeout(ms: Long) {
+        prefs.edit().putLong(KEY_CLIPBOARD_TIMEOUT_MS, ms).apply()
+        _state.update { it.copy(clipboardTimeoutMs = ms) }
+    }
+
+    val iconAliasOptions = listOf(
+        ALIAS_DEFAULT to "Calculator (default)",
+        ALIAS_CLOCK to "Clock (blue)",
+        ALIAS_NOTES to "Notes (green)",
+    )
+
+    fun switchAppIcon(alias: String) {
+        val pm = context.packageManager
+        val pkg = context.packageName
+        val allAliases = mapOf(
+            ALIAS_CLOCK to "$pkg.MainActivityClockAlias",
+            ALIAS_NOTES to "$pkg.MainActivityNotesAlias",
+        )
+        val mainComponent = ComponentName(pkg, "$pkg.MainActivity")
+
+        // Enable/disable main activity launcher entry
+        val mainState = if (alias == ALIAS_DEFAULT)
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        else
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        pm.setComponentEnabledSetting(mainComponent, mainState, PackageManager.DONT_KILL_APP)
+
+        // Enable requested alias, disable others
+        allAliases.forEach { (key, className) ->
+            val state = if (key == alias)
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            pm.setComponentEnabledSetting(ComponentName(pkg, className), state, PackageManager.DONT_KILL_APP)
+        }
+
+        prefs.edit().putString(KEY_ACTIVE_ICON, alias).apply()
+        _state.update { it.copy(activeIconAlias = alias) }
     }
 
     val autoLockOptions = listOf(

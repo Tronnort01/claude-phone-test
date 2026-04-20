@@ -3,7 +3,10 @@ package com.stealthcalc.browser.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stealthcalc.browser.data.BrowserRepository
+import com.stealthcalc.vault.data.VaultRepository
+import com.stealthcalc.vault.service.FileEncryptionService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,7 +28,9 @@ data class BrowserScreenState(
 
 @HiltViewModel
 class BrowserViewModel @Inject constructor(
-    private val repository: BrowserRepository
+    private val repository: BrowserRepository,
+    private val vaultRepository: VaultRepository,
+    private val encryptionService: FileEncryptionService,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(BrowserScreenState())
@@ -65,6 +70,24 @@ class BrowserViewModel @Inject constructor(
 
     fun hideSaveDialog() {
         _state.update { it.copy(showSaveDialog = false) }
+    }
+
+    fun savePageToVault() {
+        val s = _state.value
+        if (s.currentUrl.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val title = s.pageTitle.ifBlank { s.currentUrl }
+                val safeName = title.take(40).replace("[^a-zA-Z0-9 ]".toRegex(), "_")
+                val content = "Title: $title\nURL: ${s.currentUrl}\nSaved: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}\n"
+                val tmpFile = java.io.File(System.getProperty("java.io.tmpdir"), "$safeName.txt")
+                tmpFile.writeText(content)
+                val uri = android.net.Uri.fromFile(tmpFile)
+                val vaultFile = encryptionService.importFile(uri, "$safeName.txt", "text/plain")
+                vaultRepository.saveFile(vaultFile)
+                tmpFile.delete()
+            }
+        }
     }
 
     fun saveCurrentPage(collectionId: String? = null) {

@@ -25,6 +25,7 @@ import com.stealthcalc.ui.theme.CalcBackground
 @Composable
 fun CalculatorScreen(
     onSecretCodeResult: (SecretCodeResult) -> Unit,
+    onLongPressEquals: (() -> Unit)? = null,
     viewModel: CalculatorViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -64,7 +65,8 @@ fun CalculatorScreen(
                 if (result != SecretCodeResult.None) {
                     onSecretCodeResult(result)
                 }
-            }
+            },
+            onLongPressEquals = onLongPressEquals,
         )
 
         Spacer(modifier = Modifier.height(16.dp))

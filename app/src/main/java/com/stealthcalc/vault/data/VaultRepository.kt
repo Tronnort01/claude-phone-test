@@ -97,6 +97,9 @@ class VaultRepository @Inject constructor(
 
     suspend fun renameFile(id: String, name: String) = vaultDao.renameFile(id, name)
 
+    suspend fun updateThumbnailPath(id: String, thumbPath: String) =
+        vaultDao.updateThumbnailPath(id, thumbPath)
+
     // --- Folders ---
 
     fun getAllFolders(): Flow<List<VaultFolder>> = vaultDao.getAllFolders()

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.RotateLeft
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +33,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -185,7 +187,7 @@ fun PhotoEditorScreen(
             // ML background removal
             Button(
                 onClick = viewModel::removeBackground,
-                enabled = !state.isLoading && !state.isSaving && !state.isRemovingBackground,
+                enabled = !state.isLoading && !state.isSaving && !state.isRemovingBackground && !state.isExtractingText,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
@@ -194,8 +196,53 @@ fun PhotoEditorScreen(
                 Text(" Remove Background (ML)")
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // OCR text extraction
+            OutlinedButton(
+                onClick = viewModel::extractText,
+                enabled = state.bitmap != null && !state.isExtractingText && !state.isRemovingBackground && !state.isLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                if (state.isExtractingText) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    Text("  Extracting text...")
+                } else {
+                    Text("Extract Text (OCR)")
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // OCR result dialog
+    state.extractedText?.let { text ->
+        val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+        AlertDialog(
+            onDismissRequest = viewModel::clearExtractedText,
+            title = { Text("Extracted Text") },
+            text = {
+                androidx.compose.foundation.layout.Column {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.verticalScroll(rememberScrollState())
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
+                    viewModel.clearExtractedText()
+                }) { Text("Copy") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::clearExtractedText) { Text("Close") }
+            }
+        )
     }
 }
 

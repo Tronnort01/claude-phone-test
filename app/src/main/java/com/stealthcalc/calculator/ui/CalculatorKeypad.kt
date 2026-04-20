@@ -1,7 +1,8 @@
 package com.stealthcalc.calculator.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,9 +36,11 @@ data class CalcButton(
     val widthWeight: Float = 1f,
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CalculatorKeypad(
     onAction: (CalcAction) -> Unit,
+    onLongPressEquals: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -92,6 +95,7 @@ fun CalculatorKeypad(
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onAction(button.action)
                         },
+                        onLongClick = if (button.action == CalcAction.Equals) onLongPressEquals else null,
                         modifier = Modifier.weight(button.widthWeight)
                     )
                 }
@@ -154,10 +158,12 @@ fun ScientificPanel(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CalcKeyButton(
     button: CalcButton,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val bgColor = when (button.type) {
@@ -171,7 +177,7 @@ private fun CalcKeyButton(
             .aspectRatio(if (button.widthWeight > 1f) button.widthWeight else 1f)
             .clip(CircleShape)
             .background(bgColor)
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         contentAlignment = if (button.widthWeight > 1f) Alignment.CenterStart else Alignment.Center
     ) {
         Text(

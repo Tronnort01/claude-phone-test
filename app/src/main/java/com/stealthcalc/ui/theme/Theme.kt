@@ -24,21 +24,38 @@ private val StealthDarkColorScheme = darkColorScheme(
     error = StealthError,
 )
 
+private val AmoledColorScheme = darkColorScheme(
+    primary = StealthPrimary,
+    onPrimary = StealthOnPrimary,
+    primaryContainer = StealthPrimaryContainer,
+    onPrimaryContainer = StealthOnPrimaryContainer,
+    secondary = StealthSecondary,
+    tertiary = StealthTertiary,
+    surface = AmoledSurface,
+    onSurface = StealthOnSurface,
+    surfaceVariant = AmoledSurfaceVariant,
+    background = AmoledBackground,
+    error = StealthError,
+)
+
 @Composable
 fun StealthCalcTheme(
+    useAmoled: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val colorScheme = if (useAmoled) AmoledColorScheme else StealthDarkColorScheme
+    val bgColor = if (useAmoled) AmoledBackground else StealthBackground
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = StealthBackground.toArgb()
+            window.statusBarColor = bgColor.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }
 
     MaterialTheme(
-        colorScheme = StealthDarkColorScheme,
+        colorScheme = colorScheme,
         typography = StealthTypography,
         content = content
     )

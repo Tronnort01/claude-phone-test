@@ -12,6 +12,11 @@ val CalcTextPrimary = Color(0xFFFFFFFF)
 val CalcTextOp = Color(0xFFFFFFFF)
 val CalcButtonOpPressed = Color(0xFFFFCC80)
 
+// AMOLED / true-black theme
+val AmoledBackground = Color(0xFF000000)
+val AmoledSurface = Color(0xFF0D0D0D)
+val AmoledSurfaceVariant = Color(0xFF1A1A1A)
+
 // Stealth app colors
 val StealthPrimary = Color(0xFF6750A4)
 val StealthOnPrimary = Color(0xFFFFFFFF)
