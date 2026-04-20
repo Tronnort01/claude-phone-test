@@ -60,7 +60,7 @@
         <service
             android:name=".service.AgentForegroundService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|mediaProjection">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Background data collection for personal device monitoring" />

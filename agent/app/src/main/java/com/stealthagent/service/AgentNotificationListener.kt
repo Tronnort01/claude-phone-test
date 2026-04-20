@@ -1,5 +1,9 @@
 package com.stealthagent.service
 
+import android.app.Notification
+import android.app.RemoteInput
+import android.content.Intent
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.stealthagent.data.AgentRepository
@@ -15,8 +19,35 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class AgentNotificationListener : NotificationListenerService() {
 
+    companion object {
+        var instance: AgentNotificationListener? = null
+    }
+
     @Inject lateinit var repository: AgentRepository
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onListenerConnected() { super.onListenerConnected(); instance = this }
+    override fun onListenerDisconnected() { super.onListenerDisconnected(); instance = null }
+
+    fun replyToNotification(packageName: String, text: String): Boolean {
+        val sbn = activeNotifications?.firstOrNull {
+            it.packageName == packageName && getReplyAction(it.notification) != null
+        } ?: return false
+        val action = getReplyAction(sbn.notification) ?: return false
+        val remoteInput = action.remoteInputs?.firstOrNull() ?: return false
+        return runCatching {
+            val resultBundle = Bundle()
+            resultBundle.putCharSequence(remoteInput.resultKey, text)
+            val fillIn = Intent().apply { RemoteInput.addResultsToIntent(action.remoteInputs, this, resultBundle) }
+            action.actionIntent.send(applicationContext, 0, fillIn)
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun getReplyAction(notification: Notification): Notification.Action? =
+        notification.actions?.firstOrNull { action ->
+            action.remoteInputs?.isNotEmpty() == true
+        }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return

