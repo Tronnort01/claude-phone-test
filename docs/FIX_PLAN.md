@@ -65,6 +65,19 @@ Round 5 known limitations (deferred):
 
 ---
 
+## Post-testing iterations — Round 6 (2026-04-16) — CI fix, no app-code change
+
+Branch: `claude/fix-missing-apk-output-KV3y5`. One-commit round, CI-only. User report: "the latest build is green, but I don't see a apk file zip to download." Gradle log shows `BUILD SUCCESSFUL in 3m 2s` and all 41 tasks executed, but the `StealthCalc-debug` artifact never appears on the run.
+
+| Fix | File | Issue → Resolution |
+|---|---|---|
+| CI1 | `.github/workflows/build-apk.yml` | The workflow had `continue-on-error: true` on the `./gradlew assembleDebug` step AND `if: success()` on the `Upload APK` step AND left `if-no-files-found` at its default (`warn`). `continue-on-error: true` forces the step's `conclusion` to `success` irrespective of `outcome`; `success()` reads `conclusion`, so the upload step ran for any gradle outcome, and on the failure path `if-no-files-found: warn` silently emitted an empty artifact. The trailing `grep "BUILD FAILED"` guard only fires AFTER the upload, so the job ends up marked red but the Actions UI still has a broken "artifact expected but missing" state for the APK slot. Even on the green path, any subtle output-path drift (e.g. AGP rename, `applicationIdSuffix`, a `packageDebug`-vs-`assembleDebug` split) would hit the same silent path. Fix: (a) drop `continue-on-error: true` — Actions bash is `-eo pipefail` by default, so `./gradlew … \| tee build-output.txt` correctly fails the step when gradle exits non-zero; (b) set `if-no-files-found: error` on the APK upload so a missing APK is a loud step failure; (c) delete the now-redundant `Fail if build failed` step; (d) add a `List APK outputs` diagnostic step (`ls -la app/build/outputs/apk/debug/` + `find app/build -name 'app-debug*.apk'`) so any future path-drift failure logs what's actually on disk. Log upload stays on `if: always()` — it runs regardless of whether the build step failed. |
+| CI2 | `docs/ANDROID_BUILD_LESSONS.md` | The "Build / Workflow" table and the "Required Workflow Template" block both still taught the `continue-on-error: true` pattern, so the canonical template was reproducing the footgun. Added a new row explaining the `continue-on-error + success() + if-no-files-found=warn` interaction, and rewrote the template to match the fixed `build-apk.yml` (no `continue-on-error`, `if-no-files-found: error` on the APK upload, no `Fail if build failed` step). |
+
+Verification strategy: after push, the GitHub Actions run on `claude/fix-missing-apk-output-KV3y5` should show the `StealthCalc-debug` artifact present. If the APK is somehow NOT at `app/build/outputs/apk/debug/app-debug.apk`, the `List APK outputs` step will log the real directory contents in the Actions log AND the upload step will now fail loudly (red run, not green-with-missing-artifact), which is the correct failure mode.
+
+---
+
 ## Post-testing iterations — Round 4 (2026-04-15)
 
 User reported the Round 3 APK (`0f9037b`) no longer crashed when opening a saved recording, but the files still didn't play. Root-caused + four media fixes, plus the user's requested Round 4 stability/security bundle (A, B, C, D, J). All on branch `claude/fix-media-playback-bug-XM1sr`.
