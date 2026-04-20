@@ -298,4 +298,36 @@ The current `catch (_: Exception) {}` silently swallows the failure.
 | R8-16 | Timeline view (hourly event grouping, `TimelineScreen`) | ✅ Shipped |
 
 See `docs/ROUND8_FEATURES.md` for full implementation detail.
+
+---
+
+## Agent + Server Compatibility Audit (2026-04-20)
+
+**Trigger:** Round 8 added `lock_device`, `wipe_vault`, and other commands to the main app's `RemoteCommandHandler`. The lightweight agent (`agent/`) and server (`server/`) were audited for compatibility gaps.
+
+### Findings
+
+| Service | Gap Found | Status |
+|---------|-----------|--------|
+| **Server** (`server/`) | No gap — `Commands.kt` relays any `type: String` generically; no whitelist or enum | ✅ No changes needed |
+| **Agent** (`agent/`) — initial state | Had **zero** command handling. No WebSocket listener, no dispatch, no camera, no audio, no SMS. Data-collector only. | ❌ Missing |
+| Agent — after Round 8 initial fix | Added WebSocket listener + `lock_device`, `wipe_vault`, `ring` (3 of 13 commands) | ⚠️ Partial |
+| Agent — after full implementation | All 13 commands implemented (commits `a61361c`, `affb23c`) | ✅ Full parity |
+
+### Agent commands now implemented
+
+| Command | Implementation |
+|---------|---------------|
+| `capture_front` / `capture_back` | `AgentCameraService` — Camera2 still capture, upload via `AgentClient.uploadFile()` |
+| `record_audio` | `MediaRecorder` inline in `AgentForegroundService`, upload bytes |
+| `ring` | `RingtoneManager.TYPE_RINGTONE`, auto-stop after 10s |
+| `send_sms` | `SmsManager.getDefault().sendTextMessage()` |
+| `stream_camera_front` / `stream_camera_back` | `AgentLiveCameraService` — Camera2 320×240 JPEG stream over WebSocket to `/camera/{side}/{deviceId}` |
+| `stop_camera_stream` | `AgentLiveCameraService.stopStreaming()` |
+| `screen_record` | `AgentScreenRecordService` — MediaCodec H.264 + MediaMuxer, requires `setMediaProjection()` called first |
+| `reply_notification` | `AgentNotificationListener.replyToNotification()` via `RemoteInput` |
+| `launch_app` | `PackageManager.getLaunchIntentForPackage()` |
+| `lock_device` | `DevicePolicyManager.lockNow()` if admin active |
+| `wipe_vault` | `AgentRepository.wipe()` (clears DB + prefs) → `stopSelf()` |
+
 - `MediaRecorder` in `RecorderService` does successfully write output files — they just land in app-private storage unencrypted, not in the vault.

