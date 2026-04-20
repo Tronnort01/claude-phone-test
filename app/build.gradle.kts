@@ -109,4 +109,7 @@ dependencies {
 
     // Location (monitoring agent)
     implementation(libs.play.services.location)
+
+    // ML Kit subject segmentation — background removal in photo editor
+    implementation(libs.mlkit.subject.segmentation)
 }

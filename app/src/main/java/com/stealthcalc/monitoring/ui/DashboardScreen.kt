@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.FiberSmartRecord
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
@@ -94,6 +95,7 @@ fun DashboardScreen(
     onNavigateToAnalytics: () -> Unit = {},
     onNavigateToSmsConversations: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
+    onNavigateToMap: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -164,6 +166,15 @@ fun DashboardScreen(
             state.deviceState?.let { device ->
                 item { DeviceStatusCard(device) }
                 item { RemoteControlPanel(onNavigateToLiveScreen, onNavigateToLiveCamera, onNavigateToSmsConversations, viewModel) }
+                item {
+                    OutlinedButton(
+                        onClick = onNavigateToMap,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Map, null, Modifier.size(16.dp))
+                        Text("  View Location Map", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
 
             if (state.appUsage.isNotEmpty() && state.selectedTab == DashboardTab.ALL) {

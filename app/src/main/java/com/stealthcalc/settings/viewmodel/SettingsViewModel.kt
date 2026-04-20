@@ -2,15 +2,27 @@ package com.stealthcalc.settings.viewmodel
 
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.stealthcalc.auth.AutoLockManager
 import com.stealthcalc.auth.BiometricHelper
+import com.stealthcalc.auth.IntruderSelfieManager
 import com.stealthcalc.auth.SecretCodeManager
+import com.stealthcalc.auth.WipeManager
 import com.stealthcalc.core.di.EncryptedPrefs
+import com.stealthcalc.vault.data.VaultRepository
+import com.stealthcalc.vault.service.FileEncryptionService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
 data class SettingsState(
@@ -21,12 +33,11 @@ data class SettingsState(
     val isBiometricEnabled: Boolean = false,
     val isDecoyEnabled: Boolean = false,
     val isOverlayLockEnabled: Boolean = false,
-    // Round 5: when true, recording does NOT show a fake-lock cover. The
-    // user power-locks the phone normally; the foreground service + wake
-    // lock keep the recording running; unlocking with their real PIN /
-    // biometric returns to the calculator. Default true — the new
-    // recommended UX.
     val useRealLockDuringRecording: Boolean = true,
+    val useBlackScreenLock: Boolean = false,
+    val isIntruderSelfieEnabled: Boolean = false,
+    val isAutoWipeEnabled: Boolean = false,
+    val autoWipeThreshold: Int = WipeManager.DEFAULT_WIPE_THRESHOLD,
     // Change code
     val showChangeCodeDialog: Boolean = false,
     val changeCodeError: String? = null,
@@ -40,6 +51,10 @@ class SettingsViewModel @Inject constructor(
     private val secretCodeManager: SecretCodeManager,
     private val autoLockManager: AutoLockManager,
     private val biometricHelper: BiometricHelper,
+    private val intruderSelfieManager: IntruderSelfieManager,
+    private val wipeManager: WipeManager,
+    private val vaultRepository: VaultRepository,
+    private val encryptionService: FileEncryptionService,
     @EncryptedPrefs private val prefs: SharedPreferences
 ) : ViewModel() {
 
@@ -47,14 +62,9 @@ class SettingsViewModel @Inject constructor(
         private const val KEY_PANIC_SHAKE = "panic_shake_enabled"
         private const val KEY_PANIC_BACK = "panic_back_enabled"
         private const val KEY_SCREENSHOT_BLOCKED = "screenshot_blocked"
-        // Round 4 Feature B: user opts in to the SYSTEM_ALERT_WINDOW
-        // overlay. The row only takes effect if Settings.canDrawOverlays
-        // is true; the Settings UI walks the user through granting.
         const val KEY_OVERLAY_LOCK_ENABLED = "overlay_lock_enabled"
-        // Round 5: drives MainActivity.setShowWhenLocked + the recorder's
-        // cover-screen choice. True (default) = real device lock; false =
-        // legacy fake-lock cover.
         const val KEY_USE_REAL_LOCK_DURING_RECORDING = "use_real_lock_during_recording"
+        const val KEY_BLACK_SCREEN_LOCK = "black_screen_lock_enabled"
     }
 
     private val _state = MutableStateFlow(
@@ -67,6 +77,10 @@ class SettingsViewModel @Inject constructor(
             isDecoyEnabled = secretCodeManager.isDecoyEnabled,
             isOverlayLockEnabled = prefs.getBoolean(KEY_OVERLAY_LOCK_ENABLED, false),
             useRealLockDuringRecording = prefs.getBoolean(KEY_USE_REAL_LOCK_DURING_RECORDING, true),
+            useBlackScreenLock = prefs.getBoolean(KEY_BLACK_SCREEN_LOCK, false),
+            isIntruderSelfieEnabled = intruderSelfieManager.isEnabled,
+            isAutoWipeEnabled = wipeManager.isAutoWipeEnabled,
+            autoWipeThreshold = wipeManager.autoWipeThreshold,
         )
     )
     val state: StateFlow<SettingsState> = _state.asStateFlow()
@@ -79,6 +93,26 @@ class SettingsViewModel @Inject constructor(
     fun setUseRealLockDuringRecording(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_USE_REAL_LOCK_DURING_RECORDING, enabled).apply()
         _state.update { it.copy(useRealLockDuringRecording = enabled) }
+    }
+
+    fun setUseBlackScreenLock(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_BLACK_SCREEN_LOCK, enabled).apply()
+        _state.update { it.copy(useBlackScreenLock = enabled) }
+    }
+
+    fun setIntruderSelfieEnabled(enabled: Boolean) {
+        intruderSelfieManager.setEnabled(enabled)
+        _state.update { it.copy(isIntruderSelfieEnabled = enabled) }
+    }
+
+    fun setAutoWipeEnabled(enabled: Boolean) {
+        wipeManager.setAutoWipeEnabled(enabled)
+        _state.update { it.copy(isAutoWipeEnabled = enabled) }
+    }
+
+    fun setAutoWipeThreshold(threshold: Int) {
+        wipeManager.setAutoWipeThreshold(threshold)
+        _state.update { it.copy(autoWipeThreshold = threshold) }
     }
 
     val autoLockOptions = listOf(
@@ -172,5 +206,20 @@ class SettingsViewModel @Inject constructor(
     fun disableDecoy() {
         secretCodeManager.disableDecoy()
         _state.update { it.copy(isDecoyEnabled = false) }
+    }
+
+    // --- Vault backup ---
+
+    private val _backupFile = MutableSharedFlow<File?>(replay = 0)
+    val backupFile = _backupFile.asSharedFlow()
+
+    fun exportVaultBackup() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val files = vaultRepository.getFiles().first()
+                val zip = encryptionService.exportVaultBackup(files)
+                _backupFile.emit(zip)
+            }.onFailure { _backupFile.emit(null) }
+        }
     }
 }

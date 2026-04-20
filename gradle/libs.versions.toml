@@ -86,6 +86,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 # Google Play Services (location for monitoring agent)
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version = "21.2.0" }
 
+# ML Kit subject segmentation — background removal in photo editor
+mlkit-subject-segmentation = { group = "com.google.mlkit", name = "subject-segmentation", version = "16.0.0-beta1" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

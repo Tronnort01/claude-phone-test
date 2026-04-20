@@ -48,6 +48,8 @@ import com.stealthcalc.monitoring.ui.ScheduleConfigScreen
 import com.stealthcalc.monitoring.ui.SmsConversationScreen
 import com.stealthcalc.monitoring.ui.LiveCameraScreen
 import com.stealthcalc.monitoring.ui.LiveScreenScreen
+import com.stealthcalc.monitoring.ui.LocationMapScreen
+import com.stealthcalc.vault.ui.PhotoEditorScreen
 import com.stealthcalc.recorder.ui.RecorderScreen
 import com.stealthcalc.recorder.ui.RecordingsListScreen
 import com.stealthcalc.tasks.ui.HabitTrackerScreen
@@ -97,6 +99,10 @@ sealed class AppScreen(val route: String) {
     data object NotificationHistory : AppScreen("notification_history")
     data object QrPairing : AppScreen("qr_pairing")
     data object ScheduleConfig : AppScreen("schedule_config")
+    data object LocationMap : AppScreen("location_map")
+    data object PhotoEditor : AppScreen("photo_editor/{fileId}") {
+        fun createRoute(fileId: String) = "photo_editor/$fileId"
+    }
 }
 
 private const val VAULT_GRAPH_ROUTE = "vault_graph"
@@ -357,6 +363,9 @@ fun StealthNavGraph(
         ) {
             VaultFileViewerScreen(
                 onBack = { navController.popBackStack() },
+                onEditPhoto = { fileId ->
+                    navController.navigate(AppScreen.PhotoEditor.createRoute(fileId))
+                },
                 onMergePhoto = { baseId ->
                     navController.navigate(AppScreen.PhotoMergePicker.createRoute(baseId))
                 },
@@ -426,6 +435,7 @@ fun StealthNavGraph(
                 onNavigateToAnalytics = { navController.navigate(AppScreen.Analytics.route) },
                 onNavigateToSmsConversations = { navController.navigate(AppScreen.SmsConversations.route) },
                 onNavigateToSearch = { navController.navigate(AppScreen.EventSearch.route) },
+                onNavigateToMap = { navController.navigate(AppScreen.LocationMap.route) },
             )
         }
 
@@ -477,6 +487,17 @@ fun StealthNavGraph(
 
         composable(AppScreen.ScheduleConfig.route) {
             ScheduleConfigScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(AppScreen.LocationMap.route) {
+            LocationMapScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = AppScreen.PhotoEditor.route,
+            arguments = listOf(navArgument("fileId") { type = NavType.StringType })
+        ) {
+            PhotoEditorScreen(onBack = { navController.popBackStack() })
         }
     }
 }

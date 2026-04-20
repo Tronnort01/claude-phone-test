@@ -76,6 +76,7 @@ import java.io.File
 fun VaultFileViewerScreen(
     onBack: () -> Unit,
     onMergePhoto: (baseId: String) -> Unit = {},
+    onEditPhoto: (fileId: String) -> Unit = {},
     viewModel: VaultFileViewerViewModel = hiltViewModel(),
 ) {
     val files by viewModel.files.collectAsStateWithLifecycle()
@@ -121,6 +122,13 @@ fun VaultFileViewerScreen(
                                 expanded = showOverflow,
                                 onDismissRequest = { showOverflow = false },
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit photo") },
+                                    onClick = {
+                                        showOverflow = false
+                                        onEditPhoto(cf.id)
+                                    },
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Merge with another photo") },
                                     onClick = {

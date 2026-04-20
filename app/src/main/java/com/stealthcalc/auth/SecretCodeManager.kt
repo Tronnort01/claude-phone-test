@@ -100,6 +100,8 @@ class SecretCodeManager @Inject constructor(
             .apply()
     }
 
+    fun getFailedAttempts(): Int = prefs.getInt(KEY_FAILED_ATTEMPTS, 0)
+
     fun disableDecoy() {
         prefs.edit()
             .remove(KEY_DECOY_HASH)

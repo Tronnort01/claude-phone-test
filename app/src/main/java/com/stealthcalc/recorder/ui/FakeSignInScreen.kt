@@ -320,6 +320,135 @@ private fun PinKeypad(
     }
 }
 
+/**
+ * Pure-black screen cover for stealth recording. Tap anywhere to briefly
+ * reveal a numeric PIN pad; entering the correct PIN returns to the recorder.
+ * After 3 seconds of inactivity the pad fades back to black.
+ */
+@Composable
+fun BlackScreenLock(
+    secretPin: String,
+    onUnlock: () -> Unit,
+) {
+    BackHandler(enabled = true) { /* intentionally no-op */ }
+
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        val activity = context as? Activity
+        val window = activity?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val insetsController = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        insetsController?.apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            insetsController?.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    var showPad by remember { mutableStateOf(false) }
+    var enteredPin by remember { mutableStateOf("") }
+    var showWrong by remember { mutableStateOf(false) }
+    val padAlpha = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    // Auto-hide pad after 3 seconds of no input
+    LaunchedEffect(showPad) {
+        if (showPad) {
+            padAlpha.animateTo(1f, tween(300))
+            kotlinx.coroutines.delay(3000)
+            padAlpha.animateTo(0f, tween(500))
+            showPad = false
+            enteredPin = ""
+        }
+    }
+
+    Box(
+        modifier = androidx.compose.ui.Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {
+                if (!showPad) { showPad = true }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        if (showPad || padAlpha.value > 0f) {
+            Column(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = padAlpha.value)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // PIN dots
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    repeat(6) { i ->
+                        Box(
+                            modifier = androidx.compose.ui.Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(if (i < enteredPin.length) Color.White else Color.Gray.copy(alpha = 0.4f))
+                        )
+                    }
+                }
+                Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
+                if (showWrong) {
+                    Text("Wrong PIN", color = androidx.compose.material3.MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                }
+                Spacer(modifier = androidx.compose.ui.Modifier.height(24.dp))
+                // Numpad
+                val keys = listOf(
+                    listOf("1","2","3"),
+                    listOf("4","5","6"),
+                    listOf("7","8","9"),
+                    listOf("","0","⌫"),
+                )
+                keys.forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+                        row.forEach { key ->
+                            Box(
+                                modifier = androidx.compose.ui.Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .clickable(enabled = key.isNotEmpty()) {
+                                        when (key) {
+                                            "⌫" -> { enteredPin = enteredPin.dropLast(1); showWrong = false }
+                                            else -> {
+                                                enteredPin += key
+                                                if (enteredPin == secretPin) {
+                                                    onUnlock()
+                                                } else if (enteredPin.length >= secretPin.length) {
+                                                    showWrong = true
+                                                    scope.launch {
+                                                        kotlinx.coroutines.delay(1000)
+                                                        showWrong = false
+                                                        enteredPin = ""
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        // Reset the 3-second timer on any tap
+                                        showPad = false
+                                        showPad = true
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(key, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Light)
+                            }
+                        }
+                    }
+                    Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
 private fun formatTime(): String {
     return SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
 }

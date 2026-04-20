@@ -111,4 +111,6 @@ class MonitoringRepository @Inject constructor(
     fun unsentCount(): Flow<Int> = dao.unsentCount()
 
     suspend fun getRecent(limit: Int = 100) = dao.getRecent(limit)
+
+    suspend fun getRecentByKind(kind: String, limit: Int = 200) = dao.getRecentByKind(kind, limit)
 }

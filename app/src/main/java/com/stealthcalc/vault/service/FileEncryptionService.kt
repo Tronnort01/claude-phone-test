@@ -775,4 +775,55 @@ class FileEncryptionService @Inject constructor(
     }
 
     private fun getEncryptedExtension(type: VaultFileType): String = ".enc"
+
+    /**
+     * Export all vault encrypted files into a single ZIP in the app's cache directory.
+     * The ZIP contains the raw .enc files + a metadata manifest.json.
+     * Since the files are already AES-256-CTR encrypted, no second encryption layer is needed.
+     * Returns the zip File on success, null on failure.
+     */
+    fun exportVaultBackup(files: List<VaultFile>): File? {
+        return runCatching {
+            val ts = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                .format(java.util.Date())
+            val zipFile = File(context.cacheDir, "StealthCalc_Backup_$ts.zip")
+            java.util.zip.ZipOutputStream(FileOutputStream(zipFile)).use { zip ->
+                // manifest
+                val manifest = buildString {
+                    appendLine("{\"version\":2,\"exportedAt\":\"$ts\",\"files\":[")
+                    files.forEachIndexed { i, f ->
+                        val comma = if (i < files.lastIndex) "," else ""
+                        appendLine("  {\"id\":\"${f.id}\",\"originalName\":\"${f.originalName}\",\"type\":\"${f.fileType}\",\"size\":${f.fileSize}}$comma")
+                    }
+                    appendLine("]}")
+                }
+                zip.putNextEntry(java.util.zip.ZipEntry("manifest.json"))
+                zip.write(manifest.toByteArray())
+                zip.closeEntry()
+
+                // each encrypted file
+                for (vaultFile in files) {
+                    val encPath = vaultFile.encryptedFilePath ?: continue
+                    val encFile = File(encPath)
+                    if (!encFile.exists()) continue
+                    zip.putNextEntry(java.util.zip.ZipEntry("vault/${vaultFile.id}.enc"))
+                    FileInputStream(encFile).use { fis -> fis.copyTo(zip) }
+                    zip.closeEntry()
+                    // thumbnail if present
+                    vaultFile.thumbnailPath?.let { tp ->
+                        val thumbFile = File(tp)
+                        if (thumbFile.exists()) {
+                            zip.putNextEntry(java.util.zip.ZipEntry("thumbnails/${vaultFile.id}.thumb"))
+                            FileInputStream(thumbFile).use { fis -> fis.copyTo(zip) }
+                            zip.closeEntry()
+                        }
+                    }
+                }
+            }
+            AppLogger.log(context, "[vault]", "Vault backup created: ${zipFile.name} (${zipFile.length()} bytes)")
+            zipFile
+        }.onFailure { e ->
+            AppLogger.log(context, "[vault]", "Vault backup failed: ${e.message}")
+        }.getOrNull()
+    }
 }

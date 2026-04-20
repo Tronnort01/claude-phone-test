@@ -39,10 +39,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -63,6 +66,37 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showAutoLockPicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // Handle vault backup file share
+    LaunchedEffect(Unit) {
+        viewModel.backupFile.collect { file ->
+            if (file == null) {
+                Toast.makeText(context, "Backup failed", Toast.LENGTH_LONG).show()
+                return@collect
+            }
+            runCatching {
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "StealthCalc Vault Backup")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(
+                    Intent.createChooser(send, "Save vault backup").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }.onFailure {
+                Toast.makeText(context, "Backup share failed: ${it.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -124,7 +158,6 @@ fun SettingsScreen(
             // The ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent opens
             // a system dialog; we re-check on return via
             // rememberLauncherForActivityResult so the subtitle updates.
-            val context = LocalContext.current
             var batteryExempt by remember {
                 mutableStateOf(isIgnoringBatteryOptimizations(context))
             }
@@ -217,6 +250,80 @@ fun SettingsScreen(
                 trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
             )
 
+            // Black-screen fake lock mode
+            SettingsToggle(
+                title = "Black Screen Fake Lock",
+                subtitle = if (state.useBlackScreenLock)
+                    "On — pure black screen covers recording; tap to reveal PIN pad"
+                else
+                    "Off — show a realistic lock screen while recording",
+                checked = state.useBlackScreenLock,
+                onToggle = { viewModel.setUseBlackScreenLock(!state.useBlackScreenLock) }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // --- Security section ---
+            SectionHeader("Intruder Detection")
+
+            SettingsToggle(
+                title = "Intruder Selfie",
+                subtitle = if (state.isIntruderSelfieEnabled)
+                    "On — front camera photo taken on wrong PIN, saved to vault"
+                else
+                    "Off — take a selfie of anyone who enters the wrong PIN",
+                checked = state.isIntruderSelfieEnabled,
+                onToggle = { viewModel.setIntruderSelfieEnabled(!state.isIntruderSelfieEnabled) }
+            )
+
+            SettingsToggle(
+                title = "Auto-Wipe",
+                subtitle = if (state.isAutoWipeEnabled)
+                    "On — wipe all vault data after ${state.autoWipeThreshold} wrong PINs"
+                else
+                    "Off — delete everything after too many wrong PIN attempts",
+                checked = state.isAutoWipeEnabled,
+                onToggle = { viewModel.setAutoWipeEnabled(!state.isAutoWipeEnabled) }
+            )
+
+            if (state.isAutoWipeEnabled) {
+                var showWipeThresholdPicker by remember { mutableStateOf(false) }
+                SettingsRow(
+                    title = "Wipe after attempts",
+                    subtitle = "${state.autoWipeThreshold} wrong PINs trigger wipe",
+                    onClick = { showWipeThresholdPicker = true },
+                    trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+                )
+                if (showWipeThresholdPicker) {
+                    AlertDialog(
+                        onDismissRequest = { showWipeThresholdPicker = false },
+                        title = { Text("Wipe after N wrong PINs") },
+                        text = {
+                            Column {
+                                listOf(3, 5, 10, 15, 20).forEach { n ->
+                                    Row(
+                                        modifier = androidx.compose.ui.Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.setAutoWipeThreshold(n); showWipeThresholdPicker = false }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = state.autoWipeThreshold == n,
+                                            onClick = { viewModel.setAutoWipeThreshold(n); showWipeThresholdPicker = false }
+                                        )
+                                        Text("$n attempts", modifier = androidx.compose.ui.Modifier.padding(start = 8.dp))
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showWipeThresholdPicker = false }) { Text("Cancel") }
+                        }
+                    )
+                }
+            }
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             // --- Decoy section ---
@@ -260,6 +367,18 @@ fun SettingsScreen(
                 subtitle = "Press back 3 times rapidly to lock",
                 checked = state.isPanicBackEnabled,
                 onToggle = viewModel::togglePanicBack
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // --- Vault backup section ---
+            SectionHeader("Vault Backup")
+
+            SettingsRow(
+                title = "Export Vault Backup",
+                subtitle = "ZIP all encrypted vault files — share or save to external storage",
+                onClick = { viewModel.exportVaultBackup() },
+                trailing = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))

@@ -119,10 +119,17 @@ fun RecorderScreen(
         label = "cover_transition"
     ) { showCover ->
         if (showCover) {
-            FakeLockScreen(
-                secretPin = secretPin,
-                onUnlock = { viewModel.exitCoverScreen() }
-            )
+            if (state.useBlackScreenLock) {
+                BlackScreenLock(
+                    secretPin = secretPin,
+                    onUnlock = { viewModel.exitCoverScreen() }
+                )
+            } else {
+                FakeLockScreen(
+                    secretPin = secretPin,
+                    onUnlock = { viewModel.exitCoverScreen() }
+                )
+            }
         } else {
             RecorderControlPanel(
                 state = state,

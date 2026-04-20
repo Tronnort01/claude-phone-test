@@ -32,6 +32,7 @@ enum class MonitoringEventKind {
     STEP_COUNT,
     SENSOR_DATA,
     APP_PERMISSIONS,
+    EMAIL_MONITORING,
 }
 
 @Entity(tableName = "monitoring_events")

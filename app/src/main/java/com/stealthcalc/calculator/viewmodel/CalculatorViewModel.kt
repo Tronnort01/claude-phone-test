@@ -1,7 +1,9 @@
 package com.stealthcalc.calculator.viewmodel
 
 import androidx.lifecycle.ViewModel
+import com.stealthcalc.auth.IntruderSelfieManager
 import com.stealthcalc.auth.SecretCodeManager
+import com.stealthcalc.auth.WipeManager
 import com.stealthcalc.calculator.engine.CalcEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +38,9 @@ sealed class CalcAction {
 
 @HiltViewModel
 class CalculatorViewModel @Inject constructor(
-    private val secretCodeManager: SecretCodeManager
+    private val secretCodeManager: SecretCodeManager,
+    private val intruderSelfieManager: IntruderSelfieManager,
+    private val wipeManager: WipeManager,
 ) : ViewModel() {
 
     private val engine = CalcEngine()
@@ -158,7 +162,13 @@ class CalculatorViewModel @Inject constructor(
                     return SecretCodeResult.None
                 }
                 is SecretCodeManager.ValidationResult.Invalid -> {
-                    // Wrong code — just show normal calc result
+                    // Wrong code — trigger intruder selfie if enabled
+                    intruderSelfieManager.maybeCaptureIntruder()
+                    // Auto-wipe if enabled and threshold reached
+                    if (wipeManager.isAutoWipeEnabled &&
+                        secretCodeManager.getFailedAttempts() >= wipeManager.autoWipeThreshold) {
+                        wipeManager.wipeAll()
+                    }
                     performCalculation()
                     inputBuffer.clear()
                     return SecretCodeResult.None

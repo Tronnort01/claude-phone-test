@@ -39,6 +39,7 @@ data class RecorderScreenState(
      * and shows a hint to use the power button instead.
      */
     val useRealLockDuringRecording: Boolean = true,
+    val useBlackScreenLock: Boolean = false,
 )
 
 @HiltViewModel
@@ -54,6 +55,10 @@ class RecorderViewModel @Inject constructor(
             useRealLockDuringRecording = prefs.getBoolean(
                 SettingsViewModel.KEY_USE_REAL_LOCK_DURING_RECORDING,
                 true,
+            ),
+            useBlackScreenLock = prefs.getBoolean(
+                SettingsViewModel.KEY_BLACK_SCREEN_LOCK,
+                false,
             ),
         )
     )
